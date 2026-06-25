@@ -967,8 +967,11 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded || !session) return;
-    supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", session.user.id);
-  }, [catalog]);
+    const timer = setTimeout(() => {
+      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", session.user.id);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [catalog, loaded, session]);
 
   async function addMovimiento(entry) {
     const { data, error } = await supabase.from("movimientos").insert({ ...entry, user_id: session.user.id }).select().single();
