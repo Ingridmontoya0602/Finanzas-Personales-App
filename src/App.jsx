@@ -955,30 +955,32 @@ export default function App() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  const userId = session?.user?.id || null;
+
   useEffect(() => {
-    if (!session) return;
+    if (!userId) return;
     (async () => {
       setLoaded(false);
-      const { data: cat } = await supabase.from("catalogos").select("data").eq("user_id", session.user.id).maybeSingle();
+      const { data: cat } = await supabase.from("catalogos").select("data").eq("user_id", userId).maybeSingle();
       if (cat && cat.data && Object.keys(cat.data).length > 0) {
         setCatalog({ ...DEFAULT_CATALOG, ...cat.data });
       } else {
-        await supabase.from("catalogos").insert({ user_id: session.user.id, data: DEFAULT_CATALOG });
+        await supabase.from("catalogos").insert({ user_id: userId, data: DEFAULT_CATALOG });
         setCatalog(DEFAULT_CATALOG);
       }
-      const { data: movs } = await supabase.from("movimientos").select("*").eq("user_id", session.user.id).order("fecha", { ascending: false });
+      const { data: movs } = await supabase.from("movimientos").select("*").eq("user_id", userId).order("fecha", { ascending: false });
       setMovimientos((movs || []).map((m) => ({ ...m, cantidad: Number(m.cantidad) })));
       setLoaded(true);
     })();
-  }, [session]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!loaded || !session) return;
+    if (!loaded || !userId) return;
     const timer = setTimeout(() => {
-      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", session.user.id);
+      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", userId);
     }, 600);
     return () => clearTimeout(timer);
-  }, [catalog, loaded, session]);
+  }, [catalog, loaded, userId]);
 
   async function addMovimiento(entry) {
     const { data, error } = await supabase.from("movimientos").insert({ ...entry, user_id: session.user.id }).select().single();
