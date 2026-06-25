@@ -80,7 +80,8 @@ const DEFAULT_CATALOG = {
   seguros: [],
   servicios: [],
   prestamos: [],
-  familiares: []
+  familiares: [],
+  _bannerVisto: false
 };
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -120,7 +121,7 @@ const labelStyle = {
 };
 
 const inputBase = {
-  width: "100%", fontFamily: SHEET.fuente, border: "1px solid " + SHEET.grisBorde,
+  width: "100%", boxSizing: "border-box", fontFamily: SHEET.fuente, border: "1px solid " + SHEET.grisBorde,
   borderRadius: 2, padding: "8px 10px", fontSize: 14, background: "#fff", color: SHEET.texto
 };
 
@@ -302,7 +303,6 @@ function RegistrarTab({ catalog, addMovimiento }) {
     await addMovimiento(entry);
     setSaved(true);
     setTimeout(() => setSaved(false), 1400);
-    reset();
   }
 
   const bandColor = mov === "Egreso" ? SHEET.rosa : SHEET.verde;
@@ -404,7 +404,7 @@ function RegistrarTab({ catalog, addMovimiento }) {
           <div style={{ borderTop: `1px solid ${bandBorder}`, marginTop: 4, paddingTop: 10 }}>
             <Field label="Fecha" error={errors.fecha}>
               <input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); setErrors((p) => ({ ...p, fecha: false })); }}
-                style={{ ...inputBase, background: errors.fecha ? "#fff" : bandColor, border: errors.fecha ? `2px solid ${SHEET.rojo}` : `1px solid ${bandBorder}` }} />
+                style={{ ...inputBase, maxWidth: "100%", minWidth: 0, background: errors.fecha ? "#fff" : bandColor, border: errors.fecha ? `2px solid ${SHEET.rojo}` : `1px solid ${bandBorder}` }} />
             </Field>
           </div>
 
@@ -414,9 +414,19 @@ function RegistrarTab({ catalog, addMovimiento }) {
             </p>
           )}
 
-          <Btn primary full onClick={handleSave} style={{ marginTop: 6 }}>
-            {saved ? "✓ Guardado" : "Guardar movimiento"}
-          </Btn>
+          <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+            <Btn primary full onClick={handleSave} style={{ flex: 2 }}>
+              {saved ? "✓ Guardado" : "Guardar movimiento"}
+            </Btn>
+            <Btn full onClick={reset} style={{ flex: 1 }}>
+              Nuevo
+            </Btn>
+          </div>
+          {saved && (
+            <p style={{ fontSize: 11.5, color: SHEET.verdeBorde, fontStyle: "italic", textAlign: "center", margin: "8px 0 0" }}>
+              Guardado. Puedes seguir editando o tocar "Nuevo" para capturar otro movimiento.
+            </p>
+          )}
         </div>
       </div>
     </div>
@@ -636,10 +646,11 @@ function CatalogosTab({ catalog, setCatalog }) {
   const [newCuentaTipo, setNewCuentaTipo] = useState(catalog.metodos[0] || "TDC");
   const [newCatTipo, setNewCatTipo] = useState(Object.keys(catalog.categorias)[0] || "");
   const [newSubcatCategoria, setNewSubcatCategoria] = useState(Object.keys(catalog.subcategorias)[0] || "");
+  const [newIngresoTipo, setNewIngresoTipo] = useState(catalog.ingresoTipos[0] || "");
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "categorias", label: "Categorías" },
-    { id: "subcategorias", label: "Subcategorías" }, { id: "lugares", label: "Lugares" },
-    { id: "presupuestos", label: "Presupuesto" }, { id: "familiares", label: "Familia" }
+    { id: "subcategorias", label: "Subcategorías" }, { id: "ingresos", label: "Ingresos" },
+    { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" }, { id: "familiares", label: "Familia" }
   ];
 
   return (
@@ -690,6 +701,28 @@ function CatalogosTab({ catalog, setCatalog }) {
           </Field>
           <ListEditor title={`Subcategorías de ${newSubcatCategoria}`} items={catalog.subcategorias[newSubcatCategoria] || []}
             onAdd={(v) => addToList(["subcategorias", newSubcatCategoria], v)} onRemove={(v) => removeFromList(["subcategorias", newSubcatCategoria], v)} />
+        </div>
+      )}
+      {section === "ingresos" && (
+        <div>
+          <ListEditor title="Tipos de ingreso" items={catalog.ingresoTipos}
+            onAdd={(v) => {
+              addToList(["ingresoTipos"], v);
+              setCatalog((prev) => prev.ingresoSub[v] ? prev : { ...prev, ingresoSub: { ...prev.ingresoSub, [v]: [] } });
+              setNewIngresoTipo(v);
+            }}
+            onRemove={(v) => removeFromList(["ingresoTipos"], v)} />
+          {catalog.ingresoTipos.length > 0 && (
+            <>
+              <Field label="Tipo de ingreso">
+                <select value={newIngresoTipo} onChange={(e) => setNewIngresoTipo(e.target.value)} style={inputBase}>
+                  {catalog.ingresoTipos.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <ListEditor title={`Detalle / subcategoría de ${newIngresoTipo}`} items={catalog.ingresoSub[newIngresoTipo] || []}
+                onAdd={(v) => addToList(["ingresoSub", newIngresoTipo], v)} onRemove={(v) => removeFromList(["ingresoSub", newIngresoTipo], v)} />
+            </>
+          )}
         </div>
       )}
       {section === "lugares" && <ListEditor title="Lugares frecuentes" items={catalog.lugares} onAdd={(v) => addToList(["lugares"], v)} onRemove={(v) => removeFromList(["lugares"], v)} />}
@@ -770,9 +803,13 @@ export default function App() {
     return <p style={{ fontSize: 13, color: "#666", textAlign: "center", padding: "2rem 0", fontFamily: SHEET.fuente, fontStyle: "italic" }}>Cargando tus datos...</p>;
   }
 
-  const sinDatosPropios = (catalog.cuentas.TDC || []).length === 0 &&
+  const sinDatosPropios = !catalog._bannerVisto && (catalog.cuentas.TDC || []).length === 0 &&
     (catalog.cuentas.TDD || []).length === 0 &&
     (catalog.lugares || []).length === 0;
+
+  function cerrarBanner() {
+    setCatalog((prev) => ({ ...prev, _bannerVisto: true }));
+  }
 
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", background: "#fff", padding: "12px 8px", fontFamily: SHEET.fuente, minHeight: "100vh" }}>
@@ -783,9 +820,13 @@ export default function App() {
       <TabBar tab={tab} setTab={setTab} onLogout={handleLogout} />
       {sinDatosPropios && tab !== "catalogos" && (
         <div style={{
-          background: SHEET.amarillo, border: `1px solid ${SHEET.amarilloBorde}`, borderRadius: 4,
-          padding: "10px 12px", marginBottom: 12, fontSize: 12.5, fontStyle: "italic", lineHeight: 1.4
+          position: "relative", background: SHEET.amarillo, border: `1px solid ${SHEET.amarilloBorde}`, borderRadius: 4,
+          padding: "10px 30px 10px 12px", marginBottom: 12, fontSize: 12.5, fontStyle: "italic", lineHeight: 1.4
         }}>
+          <button aria-label="Cerrar aviso" onClick={cerrarBanner} style={{
+            position: "absolute", top: 8, right: 8, background: "none", border: "none", cursor: "pointer",
+            color: SHEET.amarilloBorde, fontSize: 14, fontWeight: 700, lineHeight: 1, padding: 4
+          }}>✕</button>
           👋 Antes de registrar movimientos, ve a la pestaña <b>Datos</b> y agrega tus tarjetas, cuentas y lugares frecuentes. Así los catálogos estarán listos a la hora de capturar.{" "}
           <button onClick={() => setTab("catalogos")} style={{
             background: "none", border: "none", textDecoration: "underline", cursor: "pointer",
