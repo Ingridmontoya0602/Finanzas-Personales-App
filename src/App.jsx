@@ -21,69 +21,66 @@ const DEFAULT_CATALOG = {
   metodos: ["Efectivo", "TDC", "TDD"],
   cuentas: {
     Efectivo: ["Cartera"],
-    TDC: ["Banregio Platino", "Banregio Mas", "Banamex Costco", "Liverpool", "Palacio de Hierro", "Santander"],
-    TDD: ["Banregio", "Santander"]
+    TDC: [],
+    TDD: []
   },
-  lugares: ["Monterrey, NL", "Orlando, FL"],
+  lugares: [],
   tipos: ["G. Fijo", "G. Variable", "Préstamo", "Inversión", "Ahorro", "Otro(a)", "Pago TDC"],
   categorias: {
     "G. Fijo": ["Seguros", "Membresías", "Servicios", "Familia"],
     "G. Variable": ["Comidas", "Compras Online", "Educación", "Entretenimiento", "Gastos Personales", "Intereses TDC", "Mascotas", "Otro(a)", "Regalos y Festejos", "Ropa y Accesorios", "Salud y Bienestar", "Supermercado", "Tecnología", "Tienda de Conveniencia", "Transporte", "Viajes y Vacaciones", "Vivienda"],
     "Préstamo": ["Bancario", "Crédito", "de Tercero", "a Tercero"],
-    "Inversión": ["GBM", "Interbrokers", "PC"],
+    "Inversión": [],
     "Ahorro": ["Viaje", "Tecnología", "Entretenimiento", "Transporte", "Casa/Hogar"],
     "Otro(a)": ["Otro(a)"],
-    "Pago TDC": ["Banregio Platino", "Banregio Mas", "Banamex Costco", "Liverpool", "Palacio de Hierro", "Santander"]
+    "Pago TDC": []
   },
   subcategorias: {
-    "Seguros": ["GNP GMM (Antonella)", "GNP GMM (JC)", "GNP GMM (Louisi)", "GNP Trasciende", "Qualitas (Swift)", "Qualitas (CRV)"],
-    "Membresías": ["1Password", "Amazon Prime EU", "Amazon Prime MX", "Apple One", "Disney+", "Huckleberry Baby (LA)", "iCloud+", "Instagram (LA)", "Kinedu Baby (LA)", "Netflix", "Norton", "PDF Expert", "PDF Expert (LA)", "PicsArt (LA)", "Scribd / Everand", "Splice (LA)", "ViX", "Super Simple (LA)", "Meta Verified (LA)"],
-    "Servicios": ["ADT Security", "Agua y Drenaje", "CFE", "Contador", "Gas (Naturgy)", "Guarderia Perros", "Gym (Station24)", "Refrendo/Tenencia", "Renta (Casa)", "SAT (ISR)", "Telcel (3170)", "Telcel (5081)", "Telcel (5607)", "Telmex (Casa)"],
-    "Familia": ["Familiar-1", "Familiar-2", "Familiar-3", "Familiar-4", "Familiar-5", "Pago TDC (Familiar-1)", "Pago TDC (Familiar-2)", "Pago TDC (Familiar-3)", "Pago TDC (Familiar-4)", "Pago TDC (Familiar-5)"],
+    "Seguros": [],
+    "Membresías": [],
+    "Servicios": [],
+    "Familia": [],
     "Comidas": ["Domicilio", "Restaurante", "Otro(a)"],
     "Compras Online": ["Amazon", "Mercado Libre", "Ebay", "Otro(a)"],
     "Educación": ["Colegiatura", "Utiles", "Otro(a)"],
     "Entretenimiento": ["Cine", "Conciertos", "Juguetes", "Otro(a)"],
     "Gastos Personales": ["Donaciones", "Clases", "Otro(a)"],
-    "Intereses TDC": ["1. enero", "2. febrero", "3. marzo", "4. abril", "5. mayo", "6. junio", "7. julio", "8. agosto", "9. septiembre", "11. noviembre", "12. diciembre"],
+    "Intereses TDC": ["1. enero", "2. febrero", "3. marzo", "4. abril", "5. mayo", "6. junio", "7. julio", "8. agosto", "9. septiembre", "10. octubre", "11. noviembre", "12. diciembre"],
     "Mascotas": ["Alimentación", "Otro(a)", "Estancia (Hotel)"],
-    "Regalos y Festejos": ["Liverpool", "Palacio de Hierro", "Costco", "Otro(a)"],
-    "Ropa y Accesorios": ["Liverpool", "Palacio de Hierro", "Costco", "Otro(a)"],
+    "Regalos y Festejos": ["Otro(a)"],
+    "Ropa y Accesorios": ["Otro(a)"],
     "Salud y Bienestar": ["Consulta", "Farmacia", "Otro(a)"],
-    "Supermercado": ["Heb", "Soriana", "Wallmart", "Costco", "Otro(a)"],
+    "Supermercado": ["Otro(a)"],
     "Tecnología": ["Apps", "PC", "Otro(a)"],
-    "Tienda de Conveniencia": ["Oxxo", "Seven", "Otro(a)"],
+    "Tienda de Conveniencia": ["Otro(a)"],
     "Transporte": ["Gasolina", "Taller", "Uber", "Tenencia", "Refrendo", "Estacionamiento", "Casetas", "Otro(a)"],
     "Viajes y Vacaciones": ["Hospedaje", "Transporte", "Comida", "Compras", "Otro(a)"],
-    "Vivienda": ["Home Depot", "Otro(a)", "Decoración"],
-    "Bancario": ["Préstamo Bancario-1", "Préstamo Bancario-2", "Préstamo Bancario-3", "Préstamo Bancario-4", "Préstamo Bancario-5"],
-    "Crédito": ["Automotriz-1", "Crédito-2", "Crédito-3", "Crédito-4", "Crédito-5"],
-    "de Tercero": ["Préstamo de 3°-1", "Préstamo de 3°-2", "Préstamo de 3°-3", "Préstamo de 3°-4", "Préstamo de 3°-5"],
-    "a Tercero": ["Préstamo a 3°-1", "Préstamo a 3°-2", "Préstamo a 3°-3", "Préstamo a 3°-4", "Préstamo a 3°-5"],
-    "GBM": ["GBM-1", "GBM-2"],
-    "Interbrokers": ["Interbrokers-1", "Interbrokers-2"],
-    "PC": ["PC-1", "PC-2"]
+    "Vivienda": ["Otro(a)"],
+    "Bancario": [],
+    "Crédito": [],
+    "de Tercero": [],
+    "a Tercero": []
   },
   ingresoTipos: ["Sueldo", "Comisión", "Préstamo", "Reembolso", "Otro(a)"],
   ingresoSub: {
-    "Sueldo": ["CG", "Sueldo-2", "Sueldo-3"],
-    "Comisión": ["CG", "Comisión-2", "Comisión-3"],
+    "Sueldo": [],
+    "Comisión": [],
     "Préstamo": ["Bancario", "de Tercero", "a Tercero"],
     "Reembolso": ["TDC", "TDD"],
     "Otro(a)": ["Otro(a)"]
   },
   presupuestos: {
-    "Comidas": 5000, "Compras Online": 10000, "Educación": 10000, "Entretenimiento": 5000,
-    "Gastos Personales": 5000, "Intereses TDC": 5000, "Mascotas": 8000, "Otro(a)": 0,
-    "Regalos y Festejos": 5000, "Ropa y Accesorios": 5000, "Salud y Bienestar": 5000,
-    "Supermercado": 15000, "Tecnología": 2500, "Tienda de Conveniencia": 2500,
-    "Transporte": 5000, "Viajes y Vacaciones": 10000, "Vivienda": 50000
+    "Comidas": 0, "Compras Online": 0, "Educación": 0, "Entretenimiento": 0,
+    "Gastos Personales": 0, "Intereses TDC": 0, "Mascotas": 0, "Otro(a)": 0,
+    "Regalos y Festejos": 0, "Ropa y Accesorios": 0, "Salud y Bienestar": 0,
+    "Supermercado": 0, "Tecnología": 0, "Tienda de Conveniencia": 0,
+    "Transporte": 0, "Viajes y Vacaciones": 0, "Vivienda": 0
   },
   membresias: [],
   seguros: [],
   servicios: [],
   prestamos: [],
-  familiares: ["Familiar-1", "Familiar-2", "Familiar-3", "Familiar-4", "Familiar-5"]
+  familiares: []
 };
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -676,9 +673,14 @@ function CatalogosTab({ catalog, setCatalog }) {
             </select>
           </Field>
           <ListEditor title={`Categorías de ${newCatTipo}`} items={catalog.categorias[newCatTipo] || []}
-            onAdd={(v) => addToList(["categorias", newCatTipo], v)} onRemove={(v) => removeFromList(["categorias", newCatTipo], v)} />
+            onAdd={(v) => {
+              addToList(["categorias", newCatTipo], v);
+              setCatalog((prev) => prev.subcategorias[v] ? prev : { ...prev, subcategorias: { ...prev.subcategorias, [v]: [] } });
+            }}
+            onRemove={(v) => removeFromList(["categorias", newCatTipo], v)} />
         </div>
       )}
+
       {section === "subcategorias" && (
         <div>
           <Field label="Categoría">
@@ -768,6 +770,10 @@ export default function App() {
     return <p style={{ fontSize: 13, color: "#666", textAlign: "center", padding: "2rem 0", fontFamily: SHEET.fuente, fontStyle: "italic" }}>Cargando tus datos...</p>;
   }
 
+  const sinDatosPropios = (catalog.cuentas.TDC || []).length === 0 &&
+    (catalog.cuentas.TDD || []).length === 0 &&
+    (catalog.lugares || []).length === 0;
+
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", background: "#fff", padding: "12px 8px", fontFamily: SHEET.fuente, minHeight: "100vh" }}>
       <div style={{ textAlign: "center", marginBottom: 12 }}>
@@ -775,6 +781,18 @@ export default function App() {
         <p style={{ fontSize: 12, color: "#666", margin: "2px 0 0", fontStyle: "italic" }}>{session.user.email} · {movimientos.length} movimientos</p>
       </div>
       <TabBar tab={tab} setTab={setTab} onLogout={handleLogout} />
+      {sinDatosPropios && tab !== "catalogos" && (
+        <div style={{
+          background: SHEET.amarillo, border: `1px solid ${SHEET.amarilloBorde}`, borderRadius: 4,
+          padding: "10px 12px", marginBottom: 12, fontSize: 12.5, fontStyle: "italic", lineHeight: 1.4
+        }}>
+          👋 Antes de registrar movimientos, ve a la pestaña <b>Datos</b> y agrega tus tarjetas, cuentas y lugares frecuentes. Así los catálogos estarán listos a la hora de capturar.{" "}
+          <button onClick={() => setTab("catalogos")} style={{
+            background: "none", border: "none", textDecoration: "underline", cursor: "pointer",
+            fontStyle: "italic", fontWeight: 700, fontFamily: SHEET.fuente, fontSize: 12.5, padding: 0
+          }}>Ir a Datos →</button>
+        </div>
+      )}
       {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} />}
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
