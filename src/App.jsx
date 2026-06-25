@@ -403,8 +403,14 @@ function RegistrarTab({ catalog, addMovimiento }) {
 
           <div style={{ borderTop: `1px solid ${bandBorder}`, marginTop: 4, paddingTop: 10 }}>
             <Field label="Fecha" error={errors.fecha}>
-              <input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); setErrors((p) => ({ ...p, fecha: false })); }}
-                style={{ ...inputBase, maxWidth: "100%", minWidth: 0, background: errors.fecha ? "#fff" : bandColor, border: errors.fecha ? `2px solid ${SHEET.rojo}` : `1px solid ${bandBorder}` }} />
+              <div style={{ width: "100%", overflow: "hidden", borderRadius: 2 }}>
+                <input type="date" value={fecha} onChange={(e) => { setFecha(e.target.value); setErrors((p) => ({ ...p, fecha: false })); }}
+                  style={{
+                    display: "block", width: "100%", boxSizing: "border-box", fontFamily: SHEET.fuente,
+                    borderRadius: 2, padding: "8px 6px", fontSize: 14, color: SHEET.texto,
+                    background: errors.fecha ? "#fff" : bandColor, border: errors.fecha ? `2px solid ${SHEET.rojo}` : `1px solid ${bandBorder}`
+                  }} />
+              </div>
             </Field>
           </div>
 
@@ -645,13 +651,15 @@ function CatalogosTab({ catalog, setCatalog }) {
   }
   const [newCuentaTipo, setNewCuentaTipo] = useState(catalog.metodos[0] || "TDC");
   const [newCatTipo, setNewCatTipo] = useState(Object.keys(catalog.categorias)[0] || "");
-  const [newSubcatCategoria, setNewSubcatCategoria] = useState(Object.keys(catalog.subcategorias)[0] || "");
+  const [newSubcatCategoria, setNewSubcatCategoria] = useState("");
   const [newIngresoTipo, setNewIngresoTipo] = useState(catalog.ingresoTipos[0] || "");
   const sections = [
-    { id: "cuentas", label: "Cuentas" }, { id: "categorias", label: "Categorías" },
-    { id: "subcategorias", label: "Subcategorías" }, { id: "ingresos", label: "Ingresos" },
+    { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
+    { id: "ingresos", label: "Ingresos" },
     { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" }, { id: "familiares", label: "Familia" }
   ];
+  const categoriasDelTipo = catalog.categorias[newCatTipo] || [];
+  const subcatActual = newSubcatCategoria && categoriasDelTipo.includes(newSubcatCategoria) ? newSubcatCategoria : (categoriasDelTipo[0] || "");
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
@@ -676,31 +684,31 @@ function CatalogosTab({ catalog, setCatalog }) {
             onAdd={(v) => addToList(["cuentas", newCuentaTipo], v)} onRemove={(v) => removeFromList(["cuentas", newCuentaTipo], v)} />
         </div>
       )}
-      {section === "categorias" && (
+      {section === "egresos" && (
         <div>
           <Field label="Tipo de gasto">
-            <select value={newCatTipo} onChange={(e) => setNewCatTipo(e.target.value)} style={inputBase}>
+            <select value={newCatTipo} onChange={(e) => { setNewCatTipo(e.target.value); setNewSubcatCategoria(""); }} style={inputBase}>
               {Object.keys(catalog.categorias).map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </Field>
-          <ListEditor title={`Categorías de ${newCatTipo}`} items={catalog.categorias[newCatTipo] || []}
+          <ListEditor title={`Categorías de ${newCatTipo}`} items={categoriasDelTipo}
             onAdd={(v) => {
               addToList(["categorias", newCatTipo], v);
               setCatalog((prev) => prev.subcategorias[v] ? prev : { ...prev, subcategorias: { ...prev.subcategorias, [v]: [] } });
+              setNewSubcatCategoria(v);
             }}
             onRemove={(v) => removeFromList(["categorias", newCatTipo], v)} />
-        </div>
-      )}
-
-      {section === "subcategorias" && (
-        <div>
-          <Field label="Categoría">
-            <select value={newSubcatCategoria} onChange={(e) => setNewSubcatCategoria(e.target.value)} style={inputBase}>
-              {Object.keys(catalog.subcategorias).map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </Field>
-          <ListEditor title={`Subcategorías de ${newSubcatCategoria}`} items={catalog.subcategorias[newSubcatCategoria] || []}
-            onAdd={(v) => addToList(["subcategorias", newSubcatCategoria], v)} onRemove={(v) => removeFromList(["subcategorias", newSubcatCategoria], v)} />
+          {categoriasDelTipo.length > 0 && (
+            <>
+              <Field label="Categoría">
+                <select value={subcatActual} onChange={(e) => setNewSubcatCategoria(e.target.value)} style={inputBase}>
+                  {categoriasDelTipo.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+              <ListEditor title={`Subcategorías de ${subcatActual}`} items={catalog.subcategorias[subcatActual] || []}
+                onAdd={(v) => addToList(["subcategorias", subcatActual], v)} onRemove={(v) => removeFromList(["subcategorias", subcatActual], v)} />
+            </>
+          )}
         </div>
       )}
       {section === "ingresos" && (
