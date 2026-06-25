@@ -213,29 +213,64 @@ function LoginScreen() {
 }
 
 function TabBar({ tab, setTab, onLogout }) {
+  const [menuAbierto, setMenuAbierto] = useState(false);
   const tabs = [
     { id: "registrar", label: "Registro", icon: "+" },
     { id: "resumen", label: "Reporte", icon: "▤" },
-    { id: "historial", label: "Historial", icon: "≡" },
-    { id: "catalogos", label: "Datos", icon: "⚙" }
+    { id: "historial", label: "Historial", icon: "≡" }
   ];
+  const menuItems = [
+    { id: "catalogos", label: "Datos" }
+  ];
+  const enMenu = menuItems.some((m) => m.id === tab);
+
+  function irA(id) {
+    setTab(id);
+    setMenuAbierto(false);
+  }
+
   return (
-    <div style={{ display: "flex", gap: 4, marginBottom: 14, position: "sticky", top: 0, background: SHEET.gris, zIndex: 5, padding: "6px 4px", borderRadius: 4, border: "1px solid " + SHEET.grisBorde }}>
-      {tabs.map((t) => (
-        <button key={t.id} onClick={() => setTab(t.id)} style={{
-          flex: 1, padding: "8px 4px", background: tab === t.id ? SHEET.amarillo : "transparent",
-          border: tab === t.id ? `1px solid ${SHEET.amarilloBorde}` : "1px solid transparent", borderRadius: 3,
-          color: SHEET.texto, fontSize: 12, fontWeight: 700, fontStyle: "italic", fontFamily: SHEET.fuente, cursor: "pointer"
+    <div style={{ position: "relative", marginBottom: 14 }}>
+      <div style={{ display: "flex", gap: 4, position: "sticky", top: 0, background: SHEET.gris, zIndex: 5, padding: "6px 4px", borderRadius: 4, border: "1px solid " + SHEET.grisBorde }}>
+        <button onClick={() => setMenuAbierto((v) => !v)} aria-label="Abrir menú" title="Más opciones" style={{
+          padding: "8px 10px", background: menuAbierto || enMenu ? SHEET.amarillo : "transparent",
+          border: menuAbierto || enMenu ? `1px solid ${SHEET.amarilloBorde}` : "1px solid transparent", borderRadius: 3,
+          color: SHEET.texto, fontSize: 15, fontWeight: 700, cursor: "pointer", lineHeight: 1
+        }}>☰</button>
+        {tabs.map((t) => (
+          <button key={t.id} onClick={() => irA(t.id)} style={{
+            flex: 1, padding: "8px 4px", background: tab === t.id ? SHEET.amarillo : "transparent",
+            border: tab === t.id ? `1px solid ${SHEET.amarilloBorde}` : "1px solid transparent", borderRadius: 3,
+            color: SHEET.texto, fontSize: 12, fontWeight: 700, fontStyle: "italic", fontFamily: SHEET.fuente, cursor: "pointer"
+          }}>
+            {t.label}
+          </button>
+        ))}
+        <button onClick={onLogout} title="Cerrar sesión" style={{
+          padding: "8px 10px", background: "transparent", border: "1px solid transparent", borderRadius: 3,
+          color: SHEET.rosaBorde, fontSize: 12, fontWeight: 700, fontStyle: "italic", fontFamily: SHEET.fuente, cursor: "pointer"
         }}>
-          {t.label}
+          Salir
         </button>
-      ))}
-      <button onClick={onLogout} title="Cerrar sesión" style={{
-        padding: "8px 10px", background: "transparent", border: "1px solid transparent", borderRadius: 3,
-        color: SHEET.rosaBorde, fontSize: 12, fontWeight: 700, fontStyle: "italic", fontFamily: SHEET.fuente, cursor: "pointer"
-      }}>
-        Salir
-      </button>
+      </div>
+      {menuAbierto && (
+        <div style={{
+          position: "absolute", top: "100%", left: 4, marginTop: 4, zIndex: 6, minWidth: 180,
+          background: "#fff", border: "1px solid " + SHEET.grisBorde, borderRadius: 4,
+          boxShadow: "0 2px 8px rgba(0,0,0,0.15)", overflow: "hidden"
+        }}>
+          {menuItems.map((m) => (
+            <button key={m.id} onClick={() => irA(m.id)} style={{
+              display: "block", width: "100%", textAlign: "left", padding: "10px 14px",
+              background: tab === m.id ? SHEET.amarillo : "#fff", border: "none",
+              borderBottom: "1px solid " + SHEET.gris, color: SHEET.texto,
+              fontSize: 13, fontWeight: 700, fontStyle: "italic", fontFamily: SHEET.fuente, cursor: "pointer"
+            }}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
