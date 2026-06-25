@@ -292,6 +292,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [cantidad, setCantidad] = useState("");
   const [esDiferido, setEsDiferido] = useState(false);
   const [plazoMeses, setPlazoMeses] = useState("");
+  const [nombreDiferido, setNombreDiferido] = useState("");
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -310,7 +311,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   function reset() {
     setMetodo(""); setCuenta(""); setTipo(""); setCategoria(""); setSubcategoria("");
     setIngresoTipo(""); setIngresoSub(""); setDescripcion(""); setLugar(""); setCantidad("");
-    setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses("");
+    setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses(""); setNombreDiferido("");
   }
 
   function validate() {
@@ -340,7 +341,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
     if (esDiferido) {
       const plazo = parseInt(plazoMeses);
       await addDiferido({
-        tarjeta: cuenta, categoria, subcategoria, descripcion,
+        nombre: nombreDiferido, tarjeta: cuenta, categoria, subcategoria, descripcion,
         costoTotal: amt, plazoMeses: plazo, inicio: fecha
       });
     } else {
@@ -422,6 +423,9 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
 
           {esDiferido ? (
             <>
+              <Field label="Nombre del diferido (opcional)">
+                <input type="text" value={nombreDiferido} onChange={(e) => setNombreDiferido(e.target.value)} style={inputBase} placeholder="Ej. iPhone nuevo, Viaje Cancún" />
+              </Field>
               <Field label="Categoría" error={errors.categoria}>
                 <select value={categoria} onChange={(e) => { setCategoria(e.target.value); setErrors((p) => ({ ...p, categoria: false })); }} style={selStyle(errors.categoria)}>
                   <option value="">Selecciona...</option>
@@ -880,7 +884,10 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido }) {
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: d.activo ? "#fff" : SHEET.gris }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{d.categoria}{d.subcategoria ? ` · ${d.subcategoria}` : ""}</p>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>
+              {d.nombre ? d.nombre : `${d.categoria}${d.subcategoria ? ` · ${d.subcategoria}` : ""}`}
+            </p>
+            {d.nombre && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{d.categoria}{d.subcategoria ? ` · ${d.subcategoria}` : ""}</p>}
             {d.descripcion && <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "1px 0 0" }}>{d.descripcion}</p>}
             <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>{d.tarjeta} · desde {fmtDate(d.inicio)}</p>
           </div>
@@ -983,9 +990,9 @@ export default function App() {
     setMovimientos((prev) => prev.filter((m) => m.id !== id));
   }
 
-  function addDiferido({ tarjeta, categoria, subcategoria, descripcion, costoTotal, plazoMeses, inicio }) {
+  function addDiferido({ nombre, tarjeta, categoria, subcategoria, descripcion, costoTotal, plazoMeses, inicio }) {
     const nuevo = {
-      id: uid(), activo: true, tarjeta, categoria, subcategoria: subcategoria || "", descripcion: descripcion || "",
+      id: uid(), activo: true, nombre: nombre || "", tarjeta, categoria, subcategoria: subcategoria || "", descripcion: descripcion || "",
       costoTotal, plazoMeses, aportacion: Math.round((costoTotal / plazoMeses) * 100) / 100,
       pagos: 0, pagado: 0, ultPago: "", inicio
     };
@@ -995,10 +1002,11 @@ export default function App() {
   async function registrarPagoDiferido(diferidoId, monto, fecha) {
     const dif = (catalog.diferidos || []).find((d) => d.id === diferidoId);
     if (!dif) return;
+    const etiqueta = dif.nombre || `${dif.categoria}${dif.subcategoria ? " · " + dif.subcategoria : ""}`;
     await addMovimiento({
       mov: "Egreso", metodo: "TDC", cuenta: dif.tarjeta,
       tipo: "Pago TDC", categoria: "Pago TDC", subcategoria: dif.tarjeta,
-      descripcion: `Diferido: ${dif.categoria}${dif.subcategoria ? " · " + dif.subcategoria : ""}${dif.descripcion ? " · " + dif.descripcion : ""}`,
+      descripcion: `Diferido: ${etiqueta}${dif.descripcion ? " · " + dif.descripcion : ""}`,
       lugar: "", fecha, cantidad: monto
     });
     setCatalog((prev) => ({
