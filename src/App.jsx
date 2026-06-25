@@ -81,6 +81,7 @@ const DEFAULT_CATALOG = {
   servicios: [],
   prestamos: [],
   familiares: [],
+  diferidos: [],
   _bannerVisto: false
 };
 
@@ -220,6 +221,7 @@ function TabBar({ tab, setTab, onLogout }) {
     { id: "historial", label: "Historial", icon: "≡" }
   ];
   const menuItems = [
+    { id: "diferidos", label: "Diferidos TDC" },
     { id: "catalogos", label: "Datos" }
   ];
   const enMenu = menuItems.some((m) => m.id === tab);
@@ -275,7 +277,7 @@ function TabBar({ tab, setTab, onLogout }) {
   );
 }
 
-function RegistrarTab({ catalog, addMovimiento }) {
+function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [mov, setMov] = useState("Egreso");
   const [metodo, setMetodo] = useState("");
   const [cuenta, setCuenta] = useState("");
@@ -288,6 +290,8 @@ function RegistrarTab({ catalog, addMovimiento }) {
   const [lugar, setLugar] = useState("");
   const [fecha, setFecha] = useState(todayISO());
   const [cantidad, setCantidad] = useState("");
+  const [esDiferido, setEsDiferido] = useState(false);
+  const [plazoMeses, setPlazoMeses] = useState("");
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -300,11 +304,13 @@ function RegistrarTab({ catalog, addMovimiento }) {
   useEffect(() => { setCategoria(""); }, [tipo]);
   useEffect(() => { setSubcategoria(""); }, [categoria]);
   useEffect(() => { setIngresoSub(""); }, [ingresoTipo]);
+  useEffect(() => { if (metodo !== "TDC") setEsDiferido(false); }, [metodo]);
+  useEffect(() => { if (mov !== "Egreso") setEsDiferido(false); }, [mov]);
 
   function reset() {
     setMetodo(""); setCuenta(""); setTipo(""); setCategoria(""); setSubcategoria("");
     setIngresoTipo(""); setIngresoSub(""); setDescripcion(""); setLugar(""); setCantidad("");
-    setFecha(todayISO()); setErrors({});
+    setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses("");
   }
 
   function validate() {
@@ -313,7 +319,10 @@ function RegistrarTab({ catalog, addMovimiento }) {
     if (!metodo) errs.metodo = true;
     if (!cuenta) errs.cuenta = true;
     if (!fecha) errs.fecha = true;
-    if (mov === "Egreso") {
+    if (esDiferido) {
+      if (!plazoMeses || parseInt(plazoMeses) <= 0) errs.plazoMeses = true;
+      if (!categoria) errs.categoria = true;
+    } else if (mov === "Egreso") {
       if (!tipo) errs.tipo = true;
       if (!categoria) errs.categoria = true;
       if (subcatsDisponibles.length > 0 && !subcategoria) errs.subcategoria = true;
@@ -328,14 +337,22 @@ function RegistrarTab({ catalog, addMovimiento }) {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     const amt = parseFloat(cantidad);
-    const entry = {
-      mov, metodo, cuenta,
-      tipo: mov === "Egreso" ? tipo : ingresoTipo,
-      categoria: mov === "Egreso" ? categoria : ingresoSub,
-      subcategoria: mov === "Egreso" ? subcategoria : "",
-      descripcion, lugar, fecha, cantidad: amt
-    };
-    await addMovimiento(entry);
+    if (esDiferido) {
+      const plazo = parseInt(plazoMeses);
+      await addDiferido({
+        tarjeta: cuenta, categoria, subcategoria, descripcion,
+        costoTotal: amt, plazoMeses: plazo, inicio: fecha
+      });
+    } else {
+      const entry = {
+        mov, metodo, cuenta,
+        tipo: mov === "Egreso" ? tipo : ingresoTipo,
+        categoria: mov === "Egreso" ? categoria : ingresoSub,
+        subcategoria: mov === "Egreso" ? subcategoria : "",
+        descripcion, lugar, fecha, cantidad: amt
+      };
+      await addMovimiento(entry);
+    }
     setSaved(true);
     setTimeout(() => setSaved(false), 1400);
   }
@@ -365,12 +382,6 @@ function RegistrarTab({ catalog, addMovimiento }) {
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
         <HeaderBand color={bandColor} borderColor={bandBorder}>{mov}</HeaderBand>
         <div style={{ padding: "12px 14px", background: "#fff" }}>
-          <Field label="Cantidad" error={errors.cantidad}>
-            <input type="number" inputMode="decimal" placeholder="$0.00" value={cantidad}
-              onChange={(e) => { setCantidad(e.target.value); setErrors((p) => ({ ...p, cantidad: false })); }}
-              style={{ ...inputBase, fontSize: 22, fontWeight: 700, textAlign: "center", border: errors.cantidad ? `2px solid ${SHEET.rojo}` : `2px solid ${bandBorder}`, background: errors.cantidad ? "#fff" : bandColor }} />
-          </Field>
-
           <Field label={mov === "Egreso" ? "Origen" : "Destino"} error={errors.metodo}>
             <select value={metodo} onChange={(e) => { setMetodo(e.target.value); setErrors((p) => ({ ...p, metodo: false })); }} style={selStyle(errors.metodo)}>
               <option value="">Selecciona...</option>
@@ -385,7 +396,58 @@ function RegistrarTab({ catalog, addMovimiento }) {
             </select>
           </Field>
 
-          {mov === "Egreso" ? (
+          {mov === "Egreso" && metodo === "TDC" && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, padding: "8px 10px", background: SHEET.gris, borderRadius: 3 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>¿Es diferido?</span>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => setEsDiferido(true)} style={{
+                  padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                  border: esDiferido ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                  background: esDiferido ? SHEET.azul : "#fff"
+                }}>Sí</button>
+                <button onClick={() => setEsDiferido(false)} style={{
+                  padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                  border: !esDiferido ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                  background: !esDiferido ? SHEET.azul : "#fff"
+                }}>No</button>
+              </div>
+            </div>
+          )}
+
+          <Field label={esDiferido ? "Costo Total" : "Cantidad"} error={errors.cantidad}>
+            <input type="number" inputMode="decimal" placeholder="$0.00" value={cantidad}
+              onChange={(e) => { setCantidad(e.target.value); setErrors((p) => ({ ...p, cantidad: false })); }}
+              style={{ ...inputBase, fontSize: 22, fontWeight: 700, textAlign: "center", border: errors.cantidad ? `2px solid ${SHEET.rojo}` : `2px solid ${bandBorder}`, background: errors.cantidad ? "#fff" : bandColor }} />
+          </Field>
+
+          {esDiferido ? (
+            <>
+              <Field label="Categoría" error={errors.categoria}>
+                <select value={categoria} onChange={(e) => { setCategoria(e.target.value); setErrors((p) => ({ ...p, categoria: false })); }} style={selStyle(errors.categoria)}>
+                  <option value="">Selecciona...</option>
+                  {Object.keys(catalog.subcategorias).map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+              {categoria && (catalog.subcategorias[categoria] || []).length > 0 && (
+                <Field label="Subcategoría" error={errors.subcategoria}>
+                  <select value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} style={selStyle(false)}>
+                    <option value="">Selecciona...</option>
+                    {(catalog.subcategorias[categoria] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </Field>
+              )}
+              <Field label="Plazo (meses)" error={errors.plazoMeses}>
+                <input type="number" inputMode="numeric" placeholder="Ej. 6" value={plazoMeses}
+                  onChange={(e) => { setPlazoMeses(e.target.value); setErrors((p) => ({ ...p, plazoMeses: false })); }}
+                  style={selStyle(errors.plazoMeses)} />
+              </Field>
+              {plazoMeses && cantidad && parseFloat(cantidad) > 0 && parseInt(plazoMeses) > 0 && (
+                <p style={{ fontSize: 12, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
+                  Mensualidad aproximada: {fmt(parseFloat(cantidad) / parseInt(plazoMeses))} x {plazoMeses} meses
+                </p>
+              )}
+            </>
+          ) : mov === "Egreso" ? (
             <>
               <Field label="Tipo" error={errors.tipo}>
                 <select value={tipo} onChange={(e) => { setTipo(e.target.value); setErrors((p) => ({ ...p, tipo: false })); }} style={selStyle(errors.tipo)}>
@@ -791,6 +853,88 @@ function CatalogosTab({ catalog, setCatalog }) {
   );
 }
 
+function DiferidosTab({ diferidos, registrarPago, eliminarDiferido }) {
+  const [pagandoId, setPagandoId] = useState(null);
+  const [montoPago, setMontoPago] = useState("");
+  const [fechaPago, setFechaPago] = useState(todayISO());
+
+  const activos = diferidos.filter((d) => d.activo);
+  const inactivos = diferidos.filter((d) => !d.activo);
+
+  function abrirPago(d) {
+    setPagandoId(d.id);
+    setMontoPago(String(d.aportacion));
+    setFechaPago(todayISO());
+  }
+
+  async function confirmarPago() {
+    const monto = parseFloat(montoPago);
+    if (!monto || monto <= 0 || !fechaPago) return;
+    await registrarPago(pagandoId, monto, fechaPago);
+    setPagandoId(null);
+  }
+
+  function Tarjeta({ d }) {
+    const pendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: d.activo ? "#fff" : SHEET.gris }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{d.categoria}{d.subcategoria ? ` · ${d.subcategoria}` : ""}</p>
+            {d.descripcion && <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "1px 0 0" }}>{d.descripcion}</p>}
+            <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>{d.tarjeta} · desde {fmtDate(d.inicio)}</p>
+          </div>
+          <button aria-label="Eliminar" onClick={() => eliminarDiferido(d.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, padding: 2, flexShrink: 0 }}>✕</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Total</span><br /><b>{fmt(d.costoTotal)}</b></div>
+          <div><span style={{ color: "#777" }}>Pagado</span><br /><b>{fmt(d.pagado)}</b></div>
+          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b>{fmt(pendiente)}</b></div>
+        </div>
+        <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic" }}>
+          Pago {d.pagos} / {d.plazoMeses} · Mensualidad {fmt(d.aportacion)}{d.ultPago ? ` · Últ. pago ${fmtDate(d.ultPago)}` : ""}
+        </p>
+        {d.activo && (
+          pagandoId === d.id ? (
+            <div style={{ marginTop: 8, padding: "8px", background: SHEET.gris, borderRadius: 3 }}>
+              <Field label="Monto del pago">
+                <input type="number" inputMode="decimal" value={montoPago} onChange={(e) => setMontoPago(e.target.value)} style={inputBase} />
+              </Field>
+              <Field label="Fecha de pago">
+                <div style={{ width: "100%", overflow: "hidden", borderRadius: 2 }}>
+                  <input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)}
+                    style={{ display: "block", width: "100%", boxSizing: "border-box", fontFamily: SHEET.fuente, borderRadius: 2, padding: "8px 6px", fontSize: 14, border: "1px solid " + SHEET.grisBorde }} />
+                </div>
+              </Field>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Btn primary full onClick={confirmarPago}>Confirmar pago</Btn>
+                <Btn full onClick={() => setPagandoId(null)}>Cancelar</Btn>
+              </div>
+            </div>
+          ) : (
+            <Btn primary full onClick={() => abrirPago(d)} style={{ marginTop: 8 }}>Registrar pago de este mes</Btn>
+          )
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activos</h3>
+      {activos.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes diferidos activos. Regístralos desde la pestaña Registro al elegir TDC.</p>}
+      {activos.map((d) => <Tarjeta key={d.id} d={d} />)}
+
+      {inactivos.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "16px 0 10px" }}>Liquidados</h3>
+          {inactivos.map((d) => <Tarjeta key={d.id} d={d} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -836,6 +980,39 @@ export default function App() {
     setMovimientos((prev) => prev.filter((m) => m.id !== id));
   }
 
+  function addDiferido({ tarjeta, categoria, subcategoria, descripcion, costoTotal, plazoMeses, inicio }) {
+    const nuevo = {
+      id: uid(), activo: true, tarjeta, categoria, subcategoria: subcategoria || "", descripcion: descripcion || "",
+      costoTotal, plazoMeses, aportacion: Math.round((costoTotal / plazoMeses) * 100) / 100,
+      pagos: 0, pagado: 0, ultPago: "", inicio
+    };
+    setCatalog((prev) => ({ ...prev, diferidos: [nuevo, ...(prev.diferidos || [])] }));
+  }
+
+  async function registrarPagoDiferido(diferidoId, monto, fecha) {
+    const dif = (catalog.diferidos || []).find((d) => d.id === diferidoId);
+    if (!dif) return;
+    await addMovimiento({
+      mov: "Egreso", metodo: "TDC", cuenta: dif.tarjeta,
+      tipo: "Pago TDC", categoria: "Pago TDC", subcategoria: dif.tarjeta,
+      descripcion: `Diferido: ${dif.categoria}${dif.subcategoria ? " · " + dif.subcategoria : ""}${dif.descripcion ? " · " + dif.descripcion : ""}`,
+      lugar: "", fecha, cantidad: monto
+    });
+    setCatalog((prev) => ({
+      ...prev,
+      diferidos: (prev.diferidos || []).map((d) => {
+        if (d.id !== diferidoId) return d;
+        const pagosNuevos = d.pagos + 1;
+        const pagadoNuevo = Math.round((d.pagado + monto) * 100) / 100;
+        return { ...d, pagos: pagosNuevos, pagado: pagadoNuevo, ultPago: fecha, activo: pagosNuevos < d.plazoMeses };
+      })
+    }));
+  }
+
+  function eliminarDiferido(diferidoId) {
+    setCatalog((prev) => ({ ...prev, diferidos: (prev.diferidos || []).filter((d) => d.id !== diferidoId) }));
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
   }
@@ -877,10 +1054,11 @@ export default function App() {
           }}>Ir a Datos →</button>
         </div>
       )}
-      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} />}
+      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} />}
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} />}
+      {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} />}
     </div>
   );
 }
