@@ -114,6 +114,26 @@ function fmtDate(iso) {
   return `${d}-${meses[parseInt(m, 10) - 1]}-${y}`;
 }
 
+function mismoMes(isoA, isoB) {
+  if (!isoA || !isoB) return false;
+  return isoA.slice(0, 7) === isoB.slice(0, 7);
+}
+
+function tocaPagarEsteMes(membresia, hoyISO = todayISO()) {
+  if (!membresia.activa) return false;
+  if (mismoMes(membresia.ultimoPago, hoyISO)) return false;
+  if (membresia.frecuencia === "Mensual") return true;
+  if (membresia.frecuencia === "Anual") {
+    if (!membresia.ultimoPago) return true;
+    const [y, m] = membresia.ultimoPago.split("-").map(Number);
+    const ultima = new Date(y, m - 1, 1);
+    const hoy = new Date(hoyISO.slice(0, 4) * 1, hoyISO.slice(5, 7) * 1 - 1, 1);
+    const mesesTranscurridos = (hoy.getFullYear() - ultima.getFullYear()) * 12 + (hoy.getMonth() - ultima.getMonth());
+    return mesesTranscurridos >= 11;
+  }
+  return false;
+}
+
 const cardBase = { background: "#fff", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "12px 14px" };
 
 const labelStyle = {
@@ -783,9 +803,54 @@ function CatalogosTab({ catalog, setCatalog }) {
   const [newCatTipo, setNewCatTipo] = useState(Object.keys(catalog.categorias)[0] || "");
   const [newSubcatCategoria, setNewSubcatCategoria] = useState("");
   const [newIngresoTipo, setNewIngresoTipo] = useState(catalog.ingresoTipos[0] || "");
+  const [memNombre, setMemNombre] = useState("");
+  const [memCategoria, setMemCategoria] = useState("");
+  const [memMetodo, setMemMetodo] = useState(catalog.metodos[0] || "TDC");
+  const [memCuenta, setMemCuenta] = useState("");
+  const [memCosto, setMemCosto] = useState("");
+  const [memFrecuencia, setMemFrecuencia] = useState("Mensual");
+  const [memTipo, setMemTipo] = useState("Automático");
+  const [memDia, setMemDia] = useState("1");
+  const [editandoMemId, setEditandoMemId] = useState(null);
+
+  function limpiarFormMembresia() {
+    setMemNombre(""); setMemCategoria(""); setMemMetodo(catalog.metodos[0] || "TDC"); setMemCuenta("");
+    setMemCosto(""); setMemFrecuencia("Mensual"); setMemTipo("Automático"); setMemDia("1"); setEditandoMemId(null);
+  }
+
+  function guardarMembresia() {
+    if (!memNombre || !memCosto || parseFloat(memCosto) <= 0) return;
+    const mem = {
+      id: editandoMemId || uid(), activa: true, nombre: memNombre, categoria: memCategoria,
+      metodo: memMetodo, cuenta: memCuenta, costo: parseFloat(memCosto),
+      frecuencia: memFrecuencia, tipoPago: memTipo, diaPago: parseInt(memDia) || 1,
+      ultimoPago: ""
+    };
+    setCatalog((prev) => {
+      const lista = prev.membresias || [];
+      const yaExiste = lista.some((m) => m.id === mem.id);
+      return { ...prev, membresias: yaExiste ? lista.map((m) => (m.id === mem.id ? { ...m, ...mem } : m)) : [mem, ...lista] };
+    });
+    limpiarFormMembresia();
+  }
+
+  function editarMembresia(m) {
+    setEditandoMemId(m.id); setMemNombre(m.nombre); setMemCategoria(m.categoria); setMemMetodo(m.metodo);
+    setMemCuenta(m.cuenta); setMemCosto(String(m.costo)); setMemFrecuencia(m.frecuencia); setMemTipo(m.tipoPago); setMemDia(String(m.diaPago));
+  }
+
+  function toggleActivaMembresia(id) {
+    setCatalog((prev) => ({ ...prev, membresias: (prev.membresias || []).map((m) => (m.id === id ? { ...m, activa: !m.activa } : m)) }));
+  }
+
+  function eliminarMembresia(id) {
+    setCatalog((prev) => ({ ...prev, membresias: (prev.membresias || []).filter((m) => m.id !== id) }));
+  }
+
+  const cuentasMemDisponibles = catalog.cuentas[memMetodo] || [];
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
-    { id: "ingresos", label: "Ingresos" },
+    { id: "ingresos", label: "Ingresos" }, { id: "membresias", label: "Membresías" },
     { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" }, { id: "familiares", label: "Familia" }
   ];
   const categoriasDelTipo = catalog.categorias[newCatTipo] || [];
@@ -864,6 +929,88 @@ function CatalogosTab({ catalog, setCatalog }) {
         </div>
       )}
       {section === "lugares" && <ListEditor title="Lugares frecuentes" items={catalog.lugares} onAdd={(v) => addToList(["lugares"], v)} onRemove={(v) => removeFromList(["lugares"], v)} />}
+      {section === "membresias" && (
+        <div>
+          <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+              {editandoMemId ? "Editar membresía" : "Agregar membresía"}
+            </p>
+            <Field label="Nombre">
+              <input type="text" value={memNombre} onChange={(e) => setMemNombre(e.target.value)} style={inputBase} placeholder="Ej. Netflix" />
+            </Field>
+            <Field label="Categoría">
+              <input type="text" value={memCategoria} onChange={(e) => setMemCategoria(e.target.value)} style={inputBase} placeholder="Ej. Entretenimiento" />
+            </Field>
+            <Field label="Método de pago">
+              <select value={memMetodo} onChange={(e) => { setMemMetodo(e.target.value); setMemCuenta(""); }} style={inputBase}>
+                {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </Field>
+            {cuentasMemDisponibles.length > 0 && (
+              <Field label="Cuenta / tarjeta">
+                <select value={memCuenta} onChange={(e) => setMemCuenta(e.target.value)} style={inputBase}>
+                  <option value="">Selecciona...</option>
+                  {cuentasMemDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+            )}
+            <Field label="Costo">
+              <input type="number" inputMode="decimal" value={memCosto} onChange={(e) => setMemCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
+            </Field>
+            <Field label="Frecuencia">
+              <div style={{ display: "flex", gap: 6 }}>
+                {["Mensual", "Anual"].map((f) => (
+                  <button key={f} onClick={() => setMemFrecuencia(f)} style={{
+                    flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                    border: memFrecuencia === f ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                    background: memFrecuencia === f ? SHEET.azul : "#fff"
+                  }}>{f}</button>
+                ))}
+              </div>
+            </Field>
+            <Field label="¿Cómo se paga?">
+              <div style={{ display: "flex", gap: 6 }}>
+                {["Automático", "Manual"].map((t) => (
+                  <button key={t} onClick={() => setMemTipo(t)} style={{
+                    flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                    border: memTipo === t ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                    background: memTipo === t ? SHEET.azul : "#fff"
+                  }}>{t}</button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Día de pago (1-30)">
+              <input type="number" inputMode="numeric" min="1" max="30" value={memDia} onChange={(e) => setMemDia(e.target.value)} style={inputBase} />
+            </Field>
+            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+              <Btn primary full onClick={guardarMembresia}>{editandoMemId ? "Guardar cambios" : "Agregar membresía"}</Btn>
+              {editandoMemId && <Btn full onClick={limpiarFormMembresia}>Cancelar</Btn>}
+            </div>
+          </div>
+
+          <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus membresías</p>
+          {(catalog.membresias || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin membresías aún.</p>}
+          {(catalog.membresias || []).map((m) => (
+            <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: m.activa ? "#fff" : SHEET.gris }}>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{m.nombre}</p>
+                <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                  {fmt(m.costo)} · {m.frecuencia} · {m.tipoPago} · día {m.diaPago}{m.cuenta ? ` · ${m.cuenta}` : ""}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                <button onClick={() => toggleActivaMembresia(m.id)} style={{
+                  fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                  border: "1px solid " + SHEET.grisBorde, background: m.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                }}>{m.activa ? "Activa" : "Inactiva"}</button>
+                <button onClick={() => editarMembresia(m)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                <button onClick={() => eliminarMembresia(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {section === "familiares" && <ListEditor title="Familiares" items={catalog.familiares} onAdd={(v) => addToList(["familiares"], v)} onRemove={(v) => removeFromList(["familiares"], v)} />}
       {section === "presupuestos" && (
         <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
