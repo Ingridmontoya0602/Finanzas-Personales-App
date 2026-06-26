@@ -876,7 +876,7 @@ function CatalogosTab({ catalog, setCatalog }) {
   const cuentasMemDisponibles = catalog.cuentas[memMetodo] || [];
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
-    { id: "ingresos", label: "Ingresos" }, { id: "membresias", label: "Membresías" },
+    { id: "ingresos", label: "Ingresos" },
     { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" }, { id: "familiares", label: "Familia" }
   ];
   const categoriasDelTipo = catalog.categorias[newCatTipo] || [];
@@ -926,8 +926,86 @@ function CatalogosTab({ catalog, setCatalog }) {
                   {categoriasDelTipo.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
-              <ListEditor title={`Subcategorías de ${subcatActual}`} items={catalog.subcategorias[subcatActual] || []}
-                onAdd={(v) => addToList(["subcategorias", subcatActual], v)} onRemove={(v) => removeFromList(["subcategorias", subcatActual], v)} />
+              {subcatActual === "Membresías" ? (
+                <div>
+                  <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+                      {editandoMemId ? "Editar membresía" : "Agregar membresía"}
+                    </p>
+                    <Field label="Nombre">
+                      <input type="text" value={memNombre} onChange={(e) => setMemNombre(e.target.value)} style={inputBase} placeholder="Ej. Netflix" />
+                    </Field>
+                    <Field label="Categoría">
+                      <input type="text" value={memCategoria} onChange={(e) => setMemCategoria(e.target.value)} style={inputBase} placeholder="Ej. Entretenimiento" />
+                    </Field>
+                    <Field label="Método de pago">
+                      <select value={memMetodo} onChange={(e) => { setMemMetodo(e.target.value); setMemCuenta(""); }} style={inputBase}>
+                        {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </Field>
+                    {cuentasMemDisponibles.length > 0 && (
+                      <Field label="Cuenta / tarjeta">
+                        <select value={memCuenta} onChange={(e) => setMemCuenta(e.target.value)} style={inputBase}>
+                          <option value="">Selecciona...</option>
+                          {cuentasMemDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </Field>
+                    )}
+                    <Field label="Costo">
+                      <input type="number" inputMode="decimal" value={memCosto} onChange={(e) => setMemCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
+                    </Field>
+                    <Field label="Frecuencia">
+                      <select value={memFrecuencia} onChange={(e) => setMemFrecuencia(e.target.value)} style={inputBase}>
+                        {["Semanal", "Quincenal", "Mensual", "Bimestral", "Trimestral", "Semestral", "Anual"].map((f) => (
+                          <option key={f} value={f}>{f}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="¿Cómo se paga?">
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {["Automático", "Manual"].map((t) => (
+                          <button key={t} onClick={() => setMemTipo(t)} style={{
+                            flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                            border: memTipo === t ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                            background: memTipo === t ? SHEET.azul : "#fff"
+                          }}>{t}</button>
+                        ))}
+                      </div>
+                    </Field>
+                    <Field label="Día de pago (1-30)">
+                      <input type="number" inputMode="numeric" min="1" max="30" value={memDia} onChange={(e) => setMemDia(e.target.value)} style={inputBase} />
+                    </Field>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      <Btn primary full onClick={guardarMembresia}>{editandoMemId ? "Guardar cambios" : "Agregar membresía"}</Btn>
+                      {editandoMemId && <Btn full onClick={limpiarFormMembresia}>Cancelar</Btn>}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus membresías</p>
+                  {(catalog.membresias || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin membresías aún.</p>}
+                  {(catalog.membresias || []).map((m) => (
+                    <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: m.activa ? "#fff" : SHEET.gris }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{m.nombre}</p>
+                        <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                          {fmt(m.costo)} · {m.frecuencia} · {m.tipoPago} · día {m.diaPago}{m.cuenta ? ` · ${m.cuenta}` : ""}
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                        <button onClick={() => toggleActivaMembresia(m.id)} style={{
+                          fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                          border: "1px solid " + SHEET.grisBorde, background: m.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                        }}>{m.activa ? "Activa" : "Inactiva"}</button>
+                        <button onClick={() => editarMembresia(m)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                        <button onClick={() => eliminarMembresia(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <ListEditor title={`Subcategorías de ${subcatActual}`} items={catalog.subcategorias[subcatActual] || []}
+                  onAdd={(v) => addToList(["subcategorias", subcatActual], v)} onRemove={(v) => removeFromList(["subcategorias", subcatActual], v)} />
+              )}
             </>
           )}
         </div>
@@ -955,83 +1033,6 @@ function CatalogosTab({ catalog, setCatalog }) {
         </div>
       )}
       {section === "lugares" && <ListEditor title="Lugares frecuentes" items={catalog.lugares} onAdd={(v) => addToList(["lugares"], v)} onRemove={(v) => removeFromList(["lugares"], v)} />}
-      {section === "membresias" && (
-        <div>
-          <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
-              {editandoMemId ? "Editar membresía" : "Agregar membresía"}
-            </p>
-            <Field label="Nombre">
-              <input type="text" value={memNombre} onChange={(e) => setMemNombre(e.target.value)} style={inputBase} placeholder="Ej. Netflix" />
-            </Field>
-            <Field label="Categoría">
-              <input type="text" value={memCategoria} onChange={(e) => setMemCategoria(e.target.value)} style={inputBase} placeholder="Ej. Entretenimiento" />
-            </Field>
-            <Field label="Método de pago">
-              <select value={memMetodo} onChange={(e) => { setMemMetodo(e.target.value); setMemCuenta(""); }} style={inputBase}>
-                {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-            </Field>
-            {cuentasMemDisponibles.length > 0 && (
-              <Field label="Cuenta / tarjeta">
-                <select value={memCuenta} onChange={(e) => setMemCuenta(e.target.value)} style={inputBase}>
-                  <option value="">Selecciona...</option>
-                  {cuentasMemDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </Field>
-            )}
-            <Field label="Costo">
-              <input type="number" inputMode="decimal" value={memCosto} onChange={(e) => setMemCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
-            </Field>
-            <Field label="Frecuencia">
-              <select value={memFrecuencia} onChange={(e) => setMemFrecuencia(e.target.value)} style={inputBase}>
-                {["Semanal", "Quincenal", "Mensual", "Bimestral", "Trimestral", "Semestral", "Anual"].map((f) => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="¿Cómo se paga?">
-              <div style={{ display: "flex", gap: 6 }}>
-                {["Automático", "Manual"].map((t) => (
-                  <button key={t} onClick={() => setMemTipo(t)} style={{
-                    flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                    border: memTipo === t ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
-                    background: memTipo === t ? SHEET.azul : "#fff"
-                  }}>{t}</button>
-                ))}
-              </div>
-            </Field>
-            <Field label="Día de pago (1-30)">
-              <input type="number" inputMode="numeric" min="1" max="30" value={memDia} onChange={(e) => setMemDia(e.target.value)} style={inputBase} />
-            </Field>
-            <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-              <Btn primary full onClick={guardarMembresia}>{editandoMemId ? "Guardar cambios" : "Agregar membresía"}</Btn>
-              {editandoMemId && <Btn full onClick={limpiarFormMembresia}>Cancelar</Btn>}
-            </div>
-          </div>
-
-          <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus membresías</p>
-          {(catalog.membresias || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin membresías aún.</p>}
-          {(catalog.membresias || []).map((m) => (
-            <div key={m.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: m.activa ? "#fff" : SHEET.gris }}>
-              <div style={{ minWidth: 0 }}>
-                <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{m.nombre}</p>
-                <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
-                  {fmt(m.costo)} · {m.frecuencia} · {m.tipoPago} · día {m.diaPago}{m.cuenta ? ` · ${m.cuenta}` : ""}
-                </p>
-              </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                <button onClick={() => toggleActivaMembresia(m.id)} style={{
-                  fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                  border: "1px solid " + SHEET.grisBorde, background: m.activa ? SHEET.verde : "#fff", color: SHEET.texto
-                }}>{m.activa ? "Activa" : "Inactiva"}</button>
-                <button onClick={() => editarMembresia(m)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
-                <button onClick={() => eliminarMembresia(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {section === "familiares" && <ListEditor title="Familiares" items={catalog.familiares} onAdd={(v) => addToList(["familiares"], v)} onRemove={(v) => removeFromList(["familiares"], v)} />}
       {section === "presupuestos" && (
@@ -1236,15 +1237,23 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
   );
 }
 
-function MembresiasTab({ membresias }) {
+function MembresiasTab({ membresias, toggleActiva }) {
   const activas = membresias.filter((m) => m.activa);
   const inactivas = membresias.filter((m) => !m.activa);
 
   function Tarjeta({ m }) {
     return (
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: m.activa ? "#fff" : SHEET.gris }}>
-        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{m.nombre}</p>
-        {m.categoria && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{m.categoria}</p>}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{m.nombre}</p>
+            {m.categoria && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{m.categoria}</p>}
+          </div>
+          <button onClick={() => toggleActiva(m.id)} style={{
+            fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+            border: "1px solid " + SHEET.grisBorde, background: m.activa ? SHEET.verde : "#fff", color: SHEET.texto, flexShrink: 0
+          }}>{m.activa ? "Activa" : "Inactiva"}</button>
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
           <div><span style={{ color: "#777" }}>Costo</span><br /><b>{fmt(m.costo)}</b></div>
           <div><span style={{ color: "#777" }}>Frecuencia</span><br /><b>{m.frecuencia}</b></div>
@@ -1264,7 +1273,7 @@ function MembresiasTab({ membresias }) {
         Para registrar un pago, ve a Registro → Egreso → Tipo "G. Fijo" → Categoría "Membresías" → elige la membresía.
       </p>
       <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activas</h3>
-      {activas.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes membresías activas. Agrégalas desde Datos → Membresías.</p>}
+      {activas.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes membresías activas. Agrégalas desde Datos → Egresos → G. Fijo → Membresías.</p>}
       {activas.map((m) => <Tarjeta key={m.id} m={m} />)}
 
       {inactivas.length > 0 && (
@@ -1392,6 +1401,15 @@ export default function App() {
     guardarCatalogoAhora(actualizado);
   }
 
+  function toggleActivaMembresiaApp(id) {
+    const actualizado = {
+      ...catalogRef.current,
+      membresias: (catalogRef.current.membresias || []).map((m) => (m.id === id ? { ...m, activa: !m.activa } : m))
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
   }
@@ -1438,7 +1456,7 @@ export default function App() {
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} />}
       {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
-      {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} />}
+      {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} />}
     </div>
   );
 }
