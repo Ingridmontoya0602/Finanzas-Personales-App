@@ -242,6 +242,7 @@ function TabBar({ tab, setTab, onLogout }) {
   ];
   const menuItems = [
     { id: "diferidos", label: "Diferidos TDC" },
+    { id: "membresias", label: "Membresías" },
     { id: "catalogos", label: "Datos" }
   ];
   const enMenu = menuItems.some((m) => m.id === tab);
@@ -521,10 +522,23 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
               </Field>
               {categoria && subcatsDisponibles.length > 0 && (
                 <Field label="Subcategoría" error={errors.subcategoria}>
-                  <select value={subcategoria} onChange={(e) => { setSubcategoria(e.target.value); setErrors((p) => ({ ...p, subcategoria: false })); }} style={selStyle(errors.subcategoria)}>
+                  <select value={subcategoria} onChange={(e) => {
+                    const v = e.target.value;
+                    setSubcategoria(v);
+                    setErrors((p) => ({ ...p, subcategoria: false }));
+                    if (categoria === "Membresías") {
+                      const mem = (catalog.membresias || []).find((m) => m.nombre === v);
+                      if (mem) setCantidad(String(mem.costo));
+                    }
+                  }} style={selStyle(errors.subcategoria)}>
                     <option value="">Selecciona...</option>
                     {subcatsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
+                  {categoria === "Membresías" && subcategoria && (catalog.membresias || []).some((m) => m.nombre === subcategoria) && (
+                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                      Te puse el costo registrado en Cantidad — puedes ajustarlo si pagaste distinto.
+                    </p>
+                  )}
                 </Field>
               )}
             </>
@@ -834,7 +848,14 @@ function CatalogosTab({ catalog, setCatalog }) {
     setCatalog((prev) => {
       const lista = prev.membresias || [];
       const yaExiste = lista.some((m) => m.id === mem.id);
-      return { ...prev, membresias: yaExiste ? lista.map((m) => (m.id === mem.id ? { ...m, ...mem } : m)) : [mem, ...lista] };
+      const nuevasMembresias = yaExiste ? lista.map((m) => (m.id === mem.id ? { ...m, ...mem } : m)) : [mem, ...lista];
+      const subcatsActuales = prev.subcategorias["Membresías"] || [];
+      const nuevasSubcats = subcatsActuales.includes(memNombre) ? subcatsActuales : [...subcatsActuales, memNombre];
+      return {
+        ...prev,
+        membresias: nuevasMembresias,
+        subcategorias: { ...prev.subcategorias, "Membresías": nuevasSubcats }
+      };
     });
     limpiarFormMembresia();
   }
@@ -963,15 +984,11 @@ function CatalogosTab({ catalog, setCatalog }) {
               <input type="number" inputMode="decimal" value={memCosto} onChange={(e) => setMemCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
             </Field>
             <Field label="Frecuencia">
-              <div style={{ display: "flex", gap: 6 }}>
-                {["Mensual", "Anual"].map((f) => (
-                  <button key={f} onClick={() => setMemFrecuencia(f)} style={{
-                    flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                    border: memFrecuencia === f ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
-                    background: memFrecuencia === f ? SHEET.azul : "#fff"
-                  }}>{f}</button>
+              <select value={memFrecuencia} onChange={(e) => setMemFrecuencia(e.target.value)} style={inputBase}>
+                {["Semanal", "Quincenal", "Mensual", "Bimestral", "Trimestral", "Semestral", "Anual"].map((f) => (
+                  <option key={f} value={f}>{f}</option>
                 ))}
-              </div>
+              </select>
             </Field>
             <Field label="¿Cómo se paga?">
               <div style={{ display: "flex", gap: 6 }}>
@@ -1219,6 +1236,47 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
   );
 }
 
+function MembresiasTab({ membresias }) {
+  const activas = membresias.filter((m) => m.activa);
+  const inactivas = membresias.filter((m) => !m.activa);
+
+  function Tarjeta({ m }) {
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: m.activa ? "#fff" : SHEET.gris }}>
+        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{m.nombre}</p>
+        {m.categoria && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{m.categoria}</p>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Costo</span><br /><b>{fmt(m.costo)}</b></div>
+          <div><span style={{ color: "#777" }}>Frecuencia</span><br /><b>{m.frecuencia}</b></div>
+          <div><span style={{ color: "#777" }}>Pago</span><br /><b>{m.tipoPago}</b></div>
+          <div><span style={{ color: "#777" }}>Día de pago</span><br /><b>{m.diaPago}</b></div>
+        </div>
+        <p style={{ fontSize: 11, color: "#555", margin: "8px 0 0" }}>
+          {m.metodo}{m.cuenta ? ` · ${m.cuenta}` : ""}{m.ultimoPago ? ` · Últ. pago ${fmtDate(m.ultimoPago)}` : ""}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
+        Para registrar un pago, ve a Registro → Egreso → Tipo "G. Fijo" → Categoría "Membresías" → elige la membresía.
+      </p>
+      <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activas</h3>
+      {activas.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes membresías activas. Agrégalas desde Datos → Membresías.</p>}
+      {activas.map((m) => <Tarjeta key={m.id} m={m} />)}
+
+      {inactivas.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "16px 0 10px" }}>Inactivas</h3>
+          {inactivas.map((m) => <Tarjeta key={m.id} m={m} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -1380,6 +1438,7 @@ export default function App() {
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} />}
       {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
+      {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} />}
     </div>
   );
 }
