@@ -1107,8 +1107,82 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido }) {
     );
   }
 
+  function exportarCSV() {
+    const headers = ["Activo/Inactivo", "Nombre", "Categoría", "Subcategoría", "Tarjeta", "Costo Total", "Plazo (meses)", "Aportación", "#Pago", "Pagado", "Pendiente", "Últ. Pago", "Inicio", "Notas"];
+    const filas = diferidos.map((d) => {
+      const pendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+      return [
+        d.activo ? "Activo" : "Inactivo", d.nombre || "", d.categoria || "", d.subcategoria || "", d.tarjeta || "",
+        d.costoTotal, d.plazoMeses, d.aportacion, `${d.pagos}/${d.plazoMeses}`, d.pagado, pendiente,
+        d.ultPago ? fmtDate(d.ultPago) : "", d.inicio ? fmtDate(d.inicio) : "", d.descripcion || ""
+      ];
+    });
+    const escape = (v) => {
+      const s = String(v ?? "");
+      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const csv = [headers, ...filas].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Diferidos_TDC_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const filas = diferidos.map((d) => {
+      const pendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+      return `<tr>
+        <td>${d.activo ? "Activo" : "Inactivo"}</td>
+        <td>${d.nombre || "-"}</td>
+        <td>${d.categoria || ""}${d.subcategoria ? " · " + d.subcategoria : ""}</td>
+        <td>${d.tarjeta || ""}</td>
+        <td class="num">${fmt(d.costoTotal)}</td>
+        <td class="num">${d.plazoMeses}</td>
+        <td class="num">${fmt(d.aportacion)}</td>
+        <td class="num">${d.pagos}/${d.plazoMeses}</td>
+        <td class="num">${fmt(d.pagado)}</td>
+        <td class="num">${fmt(pendiente)}</td>
+        <td>${d.ultPago ? fmtDate(d.ultPago) : "-"}</td>
+        <td>${d.inicio ? fmtDate(d.inicio) : "-"}</td>
+      </tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pagos Diferidos TDC</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 18px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        @media print { body { padding: 0; } }
+      </style></head>
+      <body>
+        <h1>Pagos Diferidos TDC</h1>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr>
+            <th>Estatus</th><th>Nombre</th><th>Categoría</th><th>Tarjeta</th>
+            <th class="num">Costo Total</th><th class="num">Plazo</th><th class="num">Aportación</th>
+            <th class="num">#Pago</th><th class="num">Pagado</th><th class="num">Pendiente</th>
+            <th>Últ. Pago</th><th>Inicio</th>
+          </tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
+
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+      </div>
       <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activos</h3>
       {activos.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes diferidos activos. Regístralos desde la pestaña Registro al elegir TDC.</p>}
       {activos.map((d) => <Tarjeta key={d.id} d={d} />)}
