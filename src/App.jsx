@@ -1253,19 +1253,27 @@ function MembresiasTab({ membresias, toggleActiva, movimientos, userEmail }) {
     return totales;
   }
 
+  function ultimoPagoDe(nombreMembresia) {
+    const pagos = movimientos.filter((mv) => mv.mov === "Egreso" && mv.categoria === "Membresías" && mv.subcategoria === nombreMembresia);
+    if (pagos.length === 0) return null;
+    return pagos.reduce((max, mv) => (mv.fecha > max ? mv.fecha : max), pagos[0].fecha);
+  }
+
   function exportarCSV() {
-    const headers = ["Activa/Inactiva", "Nombre", "Categoría", "Método", "Costo", "Frecuencia", "Tipo de pago", ...mesesLabel, "Total año"];
+    const headers = ["Activa/Inactiva", "Nombre", "Categoría", "Método", "Costo", "Frecuencia", "Tipo de pago", "Últ. Pago", "Pagado", ...mesesLabel, "Total año"];
     const filas = membresias.map((m) => {
       const porMes = pagosPorMes(m.nombre);
-      const total = porMes.reduce((s, v) => s + v, 0);
+      const totalAnio = porMes.reduce((s, v) => s + v, 0);
+      const ultPago = ultimoPagoDe(m.nombre);
       return [
         m.activa ? "Activa" : "Inactiva", m.nombre, m.categoria || "", m.metodo || "", m.costo, m.frecuencia, m.tipoPago,
-        ...porMes.map((v) => (v > 0 ? v : "")), total
+        ultPago ? fmtDate(ultPago) : "", totalAnio,
+        ...porMes.map((v) => (v > 0 ? v : "")), totalAnio
       ];
     });
     const totalesPorMes = mesesLabel.map((_, i) => membresias.reduce((s, m) => s + pagosPorMes(m.nombre)[i], 0));
     const totalGeneral = totalesPorMes.reduce((s, v) => s + v, 0);
-    const filaTotal = ["", "Total", "", "", "", "", "", ...totalesPorMes, totalGeneral];
+    const filaTotal = ["", "Total", "", "", "", "", "", "", totalGeneral, ...totalesPorMes, totalGeneral];
     const escape = (v) => {
       const s = String(v ?? "");
       return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
@@ -1283,18 +1291,27 @@ function MembresiasTab({ membresias, toggleActiva, movimientos, userEmail }) {
   function exportarPDF() {
     const filas = membresias.map((m) => {
       const porMes = pagosPorMes(m.nombre);
-      const total = porMes.reduce((s, v) => s + v, 0);
+      const totalAnio = porMes.reduce((s, v) => s + v, 0);
+      const ultPago = ultimoPagoDe(m.nombre);
       return `<tr>
         <td>${m.activa ? "Activa" : "Inactiva"}</td>
         <td>${m.nombre}</td>
+        <td>${m.categoria || "-"}</td>
+        <td>${m.metodo || "-"}</td>
+        <td class="num">${fmt(m.costo)}</td>
+        <td>${m.frecuencia}</td>
+        <td>${m.tipoPago}</td>
+        <td>${ultPago ? fmtDate(ultPago) : "-"}</td>
+        <td class="num">${fmt(totalAnio)}</td>
         ${porMes.map((v) => `<td class="num">${v > 0 ? fmt(v) : "-"}</td>`).join("")}
-        <td class="num">${fmt(total)}</td>
+        <td class="num">${fmt(totalAnio)}</td>
       </tr>`;
     }).join("");
     const totalesPorMes = mesesLabel.map((_, i) => membresias.reduce((s, m) => s + pagosPorMes(m.nombre)[i], 0));
     const totalGeneral = totalesPorMes.reduce((s, v) => s + v, 0);
     const filaTotal = `<tr class="total">
-        <td colspan="2">Total</td>
+        <td colspan="8">Total</td>
+        <td class="num">${fmt(totalGeneral)}</td>
         ${totalesPorMes.map((v) => `<td class="num">${fmt(v)}</td>`).join("")}
         <td class="num">${fmt(totalGeneral)}</td>
       </tr>`;
@@ -1303,12 +1320,12 @@ function MembresiasTab({ membresias, toggleActiva, movimientos, userEmail }) {
         body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
         h1 { font-size: 20px; margin: 0 0 4px; }
         p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
-        table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 14px; }
-        th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; }
+        table { width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 4px 5px; text-align: left; }
         th { background: #F4CCCC; font-weight: 700; }
         td.num, th.num { text-align: right; }
         tr.total td { font-weight: 700; background: #FFF2CC; }
-        @media print { body { padding: 0; } }
+        @media print { body { padding: 0; } table { font-size: 8px; } }
       </style></head>
       <body>
         <h1>Estado de cuenta de Membresías</h1>
@@ -1316,7 +1333,9 @@ function MembresiasTab({ membresias, toggleActiva, movimientos, userEmail }) {
         <p class="sub">Generado el ${fmtDate(todayISO())}</p>
         <table>
           <thead><tr>
-            <th>Estatus</th><th>Nombre</th>
+            <th>Estatus</th><th>Nombre</th><th>Categoría</th><th>Método</th>
+            <th class="num">Costo</th><th>Frecuencia</th><th>Tipo</th><th>Últ. Pago</th>
+            <th class="num">Pagado</th>
             ${mesesLabel.map((m) => `<th class="num">${m}</th>`).join("")}
             <th class="num">Total año</th>
           </tr></thead>
