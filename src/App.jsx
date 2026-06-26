@@ -976,10 +976,19 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded || !userId) return;
+    console.log("[guardado] catalog cambió, programando guardado en 600ms...", catalog.cuentas?.TDC);
     const timer = setTimeout(() => {
-      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", userId);
+      console.log("[guardado] enviando UPDATE a Supabase ahora...");
+      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", userId)
+        .then(({ error, status, count }) => {
+          if (error) {
+            console.error("[guardado] ERROR al guardar catálogo:", error);
+          } else {
+            console.log("[guardado] OK, status:", status);
+          }
+        });
     }, 600);
-    return () => clearTimeout(timer);
+    return () => { console.log("[guardado] cancelado (catalog volvió a cambiar antes de 600ms)"); clearTimeout(timer); };
   }, [catalog, loaded, userId]);
 
   async function addMovimiento(entry) {
