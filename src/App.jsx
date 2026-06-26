@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
 const SHEET = {
@@ -297,7 +297,7 @@ function TabBar({ tab, setTab, onLogout }) {
   );
 }
 
-function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
+function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [mov, setMov] = useState("Egreso");
   const [metodo, setMetodo] = useState("");
   const [cuenta, setCuenta] = useState("");
@@ -313,7 +313,6 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
   const [esDiferido, setEsDiferido] = useState(false);
   const [plazoMeses, setPlazoMeses] = useState("");
   const [nombreDiferido, setNombreDiferido] = useState("");
-  const [diferidoPago, setDiferidoPago] = useState("");
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -321,21 +320,18 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
   const categoriasDisponibles = catalog.categorias[tipo] || [];
   const subcatsDisponibles = catalog.subcategorias[categoria] || [];
   const ingresoSubsDisponibles = catalog.ingresoSub[ingresoTipo] || [];
-  const diferidosDeEstaCuenta = (catalog.diferidos || []).filter((d) => d.activo && d.tarjeta === cuenta);
 
   useEffect(() => { setCuenta(""); }, [metodo]);
-  useEffect(() => { setDiferidoPago(""); }, [cuenta]);
   useEffect(() => { setCategoria(""); }, [tipo]);
   useEffect(() => { setSubcategoria(""); }, [categoria]);
   useEffect(() => { setIngresoSub(""); }, [ingresoTipo]);
   useEffect(() => { if (metodo !== "TDC") setEsDiferido(false); }, [metodo]);
-  useEffect(() => { if (esDiferido) setDiferidoPago(""); }, [esDiferido]);
   useEffect(() => { if (mov !== "Egreso") setEsDiferido(false); }, [mov]);
 
   function reset() {
     setMetodo(""); setCuenta(""); setTipo(""); setCategoria(""); setSubcategoria("");
     setIngresoTipo(""); setIngresoSub(""); setDescripcion(""); setLugar(""); setCantidad("");
-    setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses(""); setNombreDiferido(""); setDiferidoPago("");
+    setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses(""); setNombreDiferido("");
   }
 
   function validate() {
@@ -368,8 +364,6 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
         nombre: nombreDiferido, tarjeta: cuenta, categoria, subcategoria, descripcion,
         costoTotal: amt, plazoMeses: plazo, inicio: fecha
       });
-    } else if (diferidoPago) {
-      await registrarPago(diferidoPago, amt, fecha);
     } else {
       const entry = {
         mov, metodo, cuenta,
@@ -441,28 +435,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
             </div>
           )}
 
-          {mov === "Egreso" && metodo === "TDC" && !esDiferido && diferidosDeEstaCuenta.length > 0 && (
-            <Field label="Diferidos (opcional)">
-              <select value={diferidoPago} onChange={(e) => {
-                const id = e.target.value;
-                setDiferidoPago(id);
-                const d = diferidosDeEstaCuenta.find((x) => x.id === id);
-                if (d) setCantidad(String(d.aportacion));
-              }} style={selStyle(false)}>
-                <option value="">Selecciona si este pago es de un diferido...</option>
-                {diferidosDeEstaCuenta.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {(d.nombre || `${d.categoria}${d.subcategoria ? " · " + d.subcategoria : ""}`)} (pago {d.pagos + 1}/{d.plazoMeses}, sugerido {fmt(d.aportacion)})
-                  </option>
-                ))}
-              </select>
-              {diferidoPago && (
-                <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                  Te puse la mensualidad sugerida en Cantidad — puedes cambiarla si pagaste distinto.
-                </p>
-              )}
-            </Field>
-          )}
+
 
           <Field label={esDiferido ? "Costo Total" : "Cantidad"} error={errors.cantidad}>
             <input type="number" inputMode="decimal" placeholder="$0.00" value={cantidad}
@@ -572,7 +545,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
 
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <Btn primary full onClick={handleSave} style={{ flex: 2 }}>
-              {saved ? "✓ Guardado" : diferidoPago ? "Registrar pago" : "Guardar movimiento"}
+              {saved ? "✓ Guardado" : "Guardar movimiento"}
             </Btn>
             <Btn full onClick={reset} style={{ flex: 1 }}>
               Nuevo
@@ -1124,6 +1097,8 @@ export default function App() {
   const [tab, setTab] = useState("registrar");
   const [catalog, setCatalog] = useState(DEFAULT_CATALOG);
   const [movimientos, setMovimientos] = useState([]);
+  const catalogRef = useRef(catalog);
+  useEffect(() => { catalogRef.current = catalog; }, [catalog]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
@@ -1132,6 +1107,11 @@ export default function App() {
   }, []);
 
   const userId = session?.user?.id || null;
+
+  async function guardarCatalogoAhora(catalogoAGuardar) {
+    if (!userId) return;
+    await supabase.from("catalogos").update({ data: catalogoAGuardar, updated_at: new Date().toISOString() }).eq("user_id", userId);
+  }
 
   useEffect(() => {
     if (!userId) return;
@@ -1170,15 +1150,17 @@ export default function App() {
     if (mov && mov.lugar && mov.lugar.startsWith("__diferido:")) {
       const diferidoId = mov.lugar.slice("__diferido:".length);
       const monto = Number(mov.cantidad);
-      setCatalog((prev) => ({
-        ...prev,
-        diferidos: (prev.diferidos || []).map((d) => {
+      const actualizado = {
+        ...catalogRef.current,
+        diferidos: (catalogRef.current.diferidos || []).map((d) => {
           if (d.id !== diferidoId) return d;
           const pagosNuevos = Math.max(0, d.pagos - 1);
           const pagadoNuevo = Math.max(0, Math.round((d.pagado - monto) * 100) / 100);
           return { ...d, pagos: pagosNuevos, pagado: pagadoNuevo, activo: true };
         })
-      }));
+      };
+      setCatalog(actualizado);
+      guardarCatalogoAhora(actualizado);
     }
   }
 
@@ -1188,11 +1170,13 @@ export default function App() {
       costoTotal, plazoMeses, aportacion: Math.round((costoTotal / plazoMeses) * 100) / 100,
       pagos: 0, pagado: 0, ultPago: "", inicio
     };
-    setCatalog((prev) => ({ ...prev, diferidos: [nuevo, ...(prev.diferidos || [])] }));
+    const actualizado = { ...catalogRef.current, diferidos: [nuevo, ...(catalogRef.current.diferidos || [])] };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
   }
 
   async function registrarPagoDiferido(diferidoId, monto, fecha) {
-    const dif = (catalog.diferidos || []).find((d) => d.id === diferidoId);
+    const dif = (catalogRef.current.diferidos || []).find((d) => d.id === diferidoId);
     if (!dif) return;
     const etiqueta = dif.nombre || `${dif.categoria}${dif.subcategoria ? " · " + dif.subcategoria : ""}`;
     await addMovimiento({
@@ -1201,19 +1185,23 @@ export default function App() {
       descripcion: `Diferido: ${etiqueta}${dif.descripcion ? " · " + dif.descripcion : ""}`,
       lugar: `__diferido:${diferidoId}`, fecha, cantidad: monto
     });
-    setCatalog((prev) => ({
-      ...prev,
-      diferidos: (prev.diferidos || []).map((d) => {
+    const actualizado = {
+      ...catalogRef.current,
+      diferidos: (catalogRef.current.diferidos || []).map((d) => {
         if (d.id !== diferidoId) return d;
         const pagosNuevos = d.pagos + 1;
         const pagadoNuevo = Math.round((d.pagado + monto) * 100) / 100;
         return { ...d, pagos: pagosNuevos, pagado: pagadoNuevo, ultPago: fecha, activo: pagosNuevos < d.plazoMeses };
       })
-    }));
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
   }
 
   function eliminarDiferido(diferidoId) {
-    setCatalog((prev) => ({ ...prev, diferidos: (prev.diferidos || []).filter((d) => d.id !== diferidoId) }));
+    const actualizado = { ...catalogRef.current, diferidos: (catalogRef.current.diferidos || []).filter((d) => d.id !== diferidoId) };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
   }
 
   async function handleLogout() {
@@ -1257,7 +1245,7 @@ export default function App() {
           }}>Ir a Datos →</button>
         </div>
       )}
-      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} registrarPago={registrarPagoDiferido} />}
+      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} />}
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} />}
