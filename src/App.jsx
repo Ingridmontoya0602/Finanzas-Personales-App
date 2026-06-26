@@ -795,28 +795,26 @@ function ListEditor({ title, items, onAdd, onRemove }) {
   );
 }
 
-function CatalogosTab({ catalog, setCatalog }) {
+function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [section, setSection] = useState("cuentas");
   function addToList(path, value) {
-    setCatalog((prev) => {
-      const next = JSON.parse(JSON.stringify(prev));
-      let ref = next;
-      for (let i = 0; i < path.length - 1; i++) ref = ref[path[i]];
-      const key = path[path.length - 1];
-      if (!Array.isArray(ref[key])) ref[key] = [];
-      if (!ref[key].includes(value)) ref[key].push(value);
-      return next;
-    });
+    const next = JSON.parse(JSON.stringify(catalog));
+    let ref = next;
+    for (let i = 0; i < path.length - 1; i++) ref = ref[path[i]];
+    const key = path[path.length - 1];
+    if (!Array.isArray(ref[key])) ref[key] = [];
+    if (!ref[key].includes(value)) ref[key].push(value);
+    setCatalog(next);
+    guardarAhora(next);
   }
   function removeFromList(path, value) {
-    setCatalog((prev) => {
-      const next = JSON.parse(JSON.stringify(prev));
-      let ref = next;
-      for (let i = 0; i < path.length - 1; i++) ref = ref[path[i]];
-      const key = path[path.length - 1];
-      ref[key] = (ref[key] || []).filter((v) => v !== value);
-      return next;
-    });
+    const next = JSON.parse(JSON.stringify(catalog));
+    let ref = next;
+    for (let i = 0; i < path.length - 1; i++) ref = ref[path[i]];
+    const key = path[path.length - 1];
+    ref[key] = (ref[key] || []).filter((v) => v !== value);
+    setCatalog(next);
+    guardarAhora(next);
   }
   const [newCuentaTipo, setNewCuentaTipo] = useState(catalog.metodos[0] || "TDC");
   const [newCatTipo, setNewCatTipo] = useState(Object.keys(catalog.categorias)[0] || "");
@@ -845,18 +843,18 @@ function CatalogosTab({ catalog, setCatalog }) {
       frecuencia: memFrecuencia, tipoPago: memTipo, diaPago: parseInt(memDia) || 1,
       ultimoPago: ""
     };
-    setCatalog((prev) => {
-      const lista = prev.membresias || [];
-      const yaExiste = lista.some((m) => m.id === mem.id);
-      const nuevasMembresias = yaExiste ? lista.map((m) => (m.id === mem.id ? { ...m, ...mem } : m)) : [mem, ...lista];
-      const subcatsActuales = prev.subcategorias["Membresías"] || [];
-      const nuevasSubcats = subcatsActuales.includes(memNombre) ? subcatsActuales : [...subcatsActuales, memNombre];
-      return {
-        ...prev,
-        membresias: nuevasMembresias,
-        subcategorias: { ...prev.subcategorias, "Membresías": nuevasSubcats }
-      };
-    });
+    const lista = catalog.membresias || [];
+    const yaExiste = lista.some((m) => m.id === mem.id);
+    const nuevasMembresias = yaExiste ? lista.map((m) => (m.id === mem.id ? { ...m, ...mem } : m)) : [mem, ...lista];
+    const subcatsActuales = catalog.subcategorias["Membresías"] || [];
+    const nuevasSubcats = subcatsActuales.includes(memNombre) ? subcatsActuales : [...subcatsActuales, memNombre];
+    const actualizado = {
+      ...catalog,
+      membresias: nuevasMembresias,
+      subcategorias: { ...catalog.subcategorias, "Membresías": nuevasSubcats }
+    };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
     limpiarFormMembresia();
   }
 
@@ -866,11 +864,15 @@ function CatalogosTab({ catalog, setCatalog }) {
   }
 
   function toggleActivaMembresia(id) {
-    setCatalog((prev) => ({ ...prev, membresias: (prev.membresias || []).map((m) => (m.id === id ? { ...m, activa: !m.activa } : m)) }));
+    const actualizado = { ...catalog, membresias: (catalog.membresias || []).map((m) => (m.id === id ? { ...m, activa: !m.activa } : m)) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
   }
 
   function eliminarMembresia(id) {
-    setCatalog((prev) => ({ ...prev, membresias: (prev.membresias || []).filter((m) => m.id !== id) }));
+    const actualizado = { ...catalog, membresias: (catalog.membresias || []).filter((m) => m.id !== id) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
   }
 
   const cuentasMemDisponibles = catalog.cuentas[memMetodo] || [];
@@ -914,8 +916,12 @@ function CatalogosTab({ catalog, setCatalog }) {
           </Field>
           <ListEditor title={`Categorías de ${newCatTipo}`} items={categoriasDelTipo}
             onAdd={(v) => {
-              addToList(["categorias", newCatTipo], v);
-              setCatalog((prev) => prev.subcategorias[v] ? prev : { ...prev, subcategorias: { ...prev.subcategorias, [v]: [] } });
+              const next = JSON.parse(JSON.stringify(catalog));
+              if (!Array.isArray(next.categorias[newCatTipo])) next.categorias[newCatTipo] = [];
+              if (!next.categorias[newCatTipo].includes(v)) next.categorias[newCatTipo].push(v);
+              if (!next.subcategorias[v]) next.subcategorias[v] = [];
+              setCatalog(next);
+              guardarAhora(next);
               setNewSubcatCategoria(v);
             }}
             onRemove={(v) => removeFromList(["categorias", newCatTipo], v)} />
@@ -1014,8 +1020,11 @@ function CatalogosTab({ catalog, setCatalog }) {
         <div>
           <ListEditor title="Tipos de ingreso" items={catalog.ingresoTipos}
             onAdd={(v) => {
-              addToList(["ingresoTipos"], v);
-              setCatalog((prev) => prev.ingresoSub[v] ? prev : { ...prev, ingresoSub: { ...prev.ingresoSub, [v]: [] } });
+              const next = JSON.parse(JSON.stringify(catalog));
+              if (!next.ingresoTipos.includes(v)) next.ingresoTipos.push(v);
+              if (!next.ingresoSub[v]) next.ingresoSub[v] = [];
+              setCatalog(next);
+              guardarAhora(next);
               setNewIngresoTipo(v);
             }}
             onRemove={(v) => removeFromList(["ingresoTipos"], v)} />
@@ -1535,7 +1544,9 @@ export default function App() {
     (catalog.lugares || []).length === 0;
 
   function cerrarBanner() {
-    setCatalog((prev) => ({ ...prev, _bannerVisto: true }));
+    const actualizado = { ...catalogRef.current, _bannerVisto: true };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
   }
 
   return (
@@ -1564,7 +1575,7 @@ export default function App() {
       {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} />}
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
-      {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} />}
+      {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} />}
       {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
       {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
     </div>
