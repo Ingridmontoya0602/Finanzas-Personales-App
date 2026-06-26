@@ -243,6 +243,7 @@ function TabBar({ tab, setTab, onLogout }) {
   const menuItems = [
     { id: "diferidos", label: "Diferidos TDC" },
     { id: "membresias", label: "Membresías" },
+    { id: "servicios", label: "Servicios" },
     { id: "catalogos", label: "Datos" }
   ];
   const enMenu = menuItems.some((m) => m.id === tab);
@@ -529,12 +530,16 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                     if (categoria === "Membresías") {
                       const mem = (catalog.membresias || []).find((m) => m.nombre === v);
                       if (mem) setCantidad(String(mem.costo));
+                    } else if (categoria === "Servicios") {
+                      const serv = (catalog.servicios || []).find((s) => s.nombre === v);
+                      if (serv) setCantidad(String(serv.costo));
                     }
                   }} style={selStyle(errors.subcategoria)}>
                     <option value="">Selecciona...</option>
                     {subcatsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
-                  {categoria === "Membresías" && subcategoria && (catalog.membresias || []).some((m) => m.nombre === subcategoria) && (
+                  {((categoria === "Membresías" && (catalog.membresias || []).some((m) => m.nombre === subcategoria)) ||
+                    (categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria))) && subcategoria && (
                     <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
                       Te puse el costo registrado en Cantidad — puedes ajustarlo si pagaste distinto.
                     </p>
@@ -829,6 +834,15 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [memTipo, setMemTipo] = useState("Automático");
   const [memDia, setMemDia] = useState("1");
   const [editandoMemId, setEditandoMemId] = useState(null);
+  const [servNombre, setServNombre] = useState("");
+  const [servCategoria, setServCategoria] = useState("");
+  const [servMetodo, setServMetodo] = useState(catalog.metodos[0] || "TDC");
+  const [servCuenta, setServCuenta] = useState("");
+  const [servCosto, setServCosto] = useState("");
+  const [servFrecuencia, setServFrecuencia] = useState("Mensual");
+  const [servTipo, setServTipo] = useState("Automático");
+  const [servDia, setServDia] = useState("1");
+  const [editandoServId, setEditandoServId] = useState(null);
 
   function limpiarFormMembresia() {
     setMemNombre(""); setMemCategoria(""); setMemMetodo(catalog.metodos[0] || "TDC"); setMemCuenta("");
@@ -875,7 +889,53 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
     guardarAhora(actualizado);
   }
 
+  function limpiarFormServicio() {
+    setServNombre(""); setServCategoria(""); setServMetodo(catalog.metodos[0] || "TDC"); setServCuenta("");
+    setServCosto(""); setServFrecuencia("Mensual"); setServTipo("Automático"); setServDia("1"); setEditandoServId(null);
+  }
+
+  function guardarServicio() {
+    if (!servNombre || !servCosto || parseFloat(servCosto) <= 0) return;
+    const serv = {
+      id: editandoServId || uid(), activa: true, nombre: servNombre, categoria: servCategoria,
+      metodo: servMetodo, cuenta: servCuenta, costo: parseFloat(servCosto),
+      frecuencia: servFrecuencia, tipoPago: servTipo, diaPago: parseInt(servDia) || 1,
+      ultimoPago: ""
+    };
+    const lista = catalog.servicios || [];
+    const yaExiste = lista.some((s) => s.id === serv.id);
+    const nuevosServicios = yaExiste ? lista.map((s) => (s.id === serv.id ? { ...s, ...serv } : s)) : [serv, ...lista];
+    const subcatsActuales = catalog.subcategorias["Servicios"] || [];
+    const nuevasSubcats = subcatsActuales.includes(servNombre) ? subcatsActuales : [...subcatsActuales, servNombre];
+    const actualizado = {
+      ...catalog,
+      servicios: nuevosServicios,
+      subcategorias: { ...catalog.subcategorias, "Servicios": nuevasSubcats }
+    };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+    limpiarFormServicio();
+  }
+
+  function editarServicio(s) {
+    setEditandoServId(s.id); setServNombre(s.nombre); setServCategoria(s.categoria); setServMetodo(s.metodo);
+    setServCuenta(s.cuenta); setServCosto(String(s.costo)); setServFrecuencia(s.frecuencia); setServTipo(s.tipoPago); setServDia(String(s.diaPago));
+  }
+
+  function toggleActivaServicio(id) {
+    const actualizado = { ...catalog, servicios: (catalog.servicios || []).map((s) => (s.id === id ? { ...s, activa: !s.activa } : s)) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function eliminarServicio(id) {
+    const actualizado = { ...catalog, servicios: (catalog.servicios || []).filter((s) => s.id !== id) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
   const cuentasMemDisponibles = catalog.cuentas[memMetodo] || [];
+  const cuentasServDisponibles = catalog.cuentas[servMetodo] || [];
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
     { id: "ingresos", label: "Ingresos" },
@@ -932,7 +992,83 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                   {categoriasDelTipo.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
-              {subcatActual === "Membresías" ? (
+              {subcatActual === "Servicios" ? (
+                <div>
+                  <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+                      {editandoServId ? "Editar servicio" : "Agregar servicio"}
+                    </p>
+                    <Field label="Nombre">
+                      <input type="text" value={servNombre} onChange={(e) => setServNombre(e.target.value)} style={inputBase} placeholder="Ej. CFE, Telmex" />
+                    </Field>
+                    <Field label="Categoría">
+                      <input type="text" value={servCategoria} onChange={(e) => setServCategoria(e.target.value)} style={inputBase} placeholder="Ej. Casa/Hogar" />
+                    </Field>
+                    <Field label="Método de pago">
+                      <select value={servMetodo} onChange={(e) => { setServMetodo(e.target.value); setServCuenta(""); }} style={inputBase}>
+                        {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </Field>
+                    {cuentasServDisponibles.length > 0 && (
+                      <Field label="Cuenta / tarjeta">
+                        <select value={servCuenta} onChange={(e) => setServCuenta(e.target.value)} style={inputBase}>
+                          <option value="">Selecciona...</option>
+                          {cuentasServDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </Field>
+                    )}
+                    <Field label="Costo">
+                      <input type="number" inputMode="decimal" value={servCosto} onChange={(e) => setServCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
+                    </Field>
+                    <Field label="Frecuencia">
+                      <select value={servFrecuencia} onChange={(e) => setServFrecuencia(e.target.value)} style={inputBase}>
+                        {["Semanal", "Quincenal", "Mensual", "Bimestral", "Trimestral", "Semestral", "Anual"].map((f) => (
+                          <option key={f} value={f}>{f}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="¿Cómo se paga?">
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {["Automático", "Manual"].map((t) => (
+                          <button key={t} onClick={() => setServTipo(t)} style={{
+                            flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                            border: servTipo === t ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                            background: servTipo === t ? SHEET.azul : "#fff"
+                          }}>{t}</button>
+                        ))}
+                      </div>
+                    </Field>
+                    <Field label="Día de pago (1-30)">
+                      <input type="number" inputMode="numeric" min="1" max="30" value={servDia} onChange={(e) => setServDia(e.target.value)} style={inputBase} />
+                    </Field>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      <Btn primary full onClick={guardarServicio}>{editandoServId ? "Guardar cambios" : "Agregar servicio"}</Btn>
+                      {editandoServId && <Btn full onClick={limpiarFormServicio}>Cancelar</Btn>}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus servicios</p>
+                  {(catalog.servicios || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin servicios aún.</p>}
+                  {(catalog.servicios || []).map((s) => (
+                    <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: s.activa ? "#fff" : SHEET.gris }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{s.nombre}</p>
+                        <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                          {fmt(s.costo)} · {s.frecuencia} · {s.tipoPago} · día {s.diaPago}{s.cuenta ? ` · ${s.cuenta}` : ""}
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                        <button onClick={() => toggleActivaServicio(s.id)} style={{
+                          fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                          border: "1px solid " + SHEET.grisBorde, background: s.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                        }}>{s.activa ? "Activa" : "Inactiva"}</button>
+                        <button onClick={() => editarServicio(s)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                        <button onClick={() => eliminarServicio(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : subcatActual === "Membresías" ? (
                 <div>
                   <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
                     <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
@@ -1405,6 +1541,165 @@ function MembresiasTab({ membresias, toggleActiva, movimientos, userEmail }) {
   );
 }
 
+function ServiciosTab({ servicios, toggleActiva, movimientos, userEmail }) {
+  const activos = servicios.filter((s) => s.activa);
+  const inactivos = servicios.filter((s) => !s.activa);
+  const mesesLabel = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+  function pagosPorMes(nombreServicio) {
+    const totales = new Array(12).fill(0);
+    movimientos.forEach((mv) => {
+      if (mv.mov === "Egreso" && mv.categoria === "Servicios" && mv.subcategoria === nombreServicio) {
+        const mesIdx = parseInt(mv.fecha.slice(5, 7), 10) - 1;
+        if (mesIdx >= 0 && mesIdx < 12) totales[mesIdx] += Number(mv.cantidad);
+      }
+    });
+    return totales;
+  }
+
+  function ultimoPagoDe(nombreServicio) {
+    const pagos = movimientos.filter((mv) => mv.mov === "Egreso" && mv.categoria === "Servicios" && mv.subcategoria === nombreServicio);
+    if (pagos.length === 0) return null;
+    return pagos.reduce((max, mv) => (mv.fecha > max ? mv.fecha : max), pagos[0].fecha);
+  }
+
+  function exportarCSV() {
+    const headers = ["Activo/Inactivo", "Nombre", "Categoría", "Método", "Costo", "Frecuencia", "Tipo de pago", "Últ. Pago", "Pagado", ...mesesLabel, "Total año"];
+    const filas = servicios.map((s) => {
+      const porMes = pagosPorMes(s.nombre);
+      const totalAnio = porMes.reduce((sum, v) => sum + v, 0);
+      const ultPago = ultimoPagoDe(s.nombre);
+      return [
+        s.activa ? "Activo" : "Inactivo", s.nombre, s.categoria || "", s.metodo || "", s.costo, s.frecuencia, s.tipoPago,
+        ultPago ? fmtDate(ultPago) : "", totalAnio,
+        ...porMes.map((v) => (v > 0 ? v : "")), totalAnio
+      ];
+    });
+    const totalesPorMes = mesesLabel.map((_, i) => servicios.reduce((sum, s) => sum + pagosPorMes(s.nombre)[i], 0));
+    const totalGeneral = totalesPorMes.reduce((sum, v) => sum + v, 0);
+    const filaTotal = ["", "Total", "", "", "", "", "", "", totalGeneral, ...totalesPorMes, totalGeneral];
+    const escape = (v) => {
+      const str = String(v ?? "");
+      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const encabezado = [["Estado de cuenta de Servicios"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Servicios_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const filas = servicios.map((s) => {
+      const porMes = pagosPorMes(s.nombre);
+      const totalAnio = porMes.reduce((sum, v) => sum + v, 0);
+      const ultPago = ultimoPagoDe(s.nombre);
+      return `<tr>
+        <td>${s.activa ? "Activo" : "Inactivo"}</td>
+        <td>${s.nombre}</td>
+        <td>${s.categoria || "-"}</td>
+        <td>${s.metodo || "-"}</td>
+        <td class="num">${fmt(s.costo)}</td>
+        <td>${s.frecuencia}</td>
+        <td>${s.tipoPago}</td>
+        <td>${ultPago ? fmtDate(ultPago) : "-"}</td>
+        <td class="num">${fmt(totalAnio)}</td>
+        ${porMes.map((v) => `<td class="num">${v > 0 ? fmt(v) : "-"}</td>`).join("")}
+        <td class="num">${fmt(totalAnio)}</td>
+      </tr>`;
+    }).join("");
+    const totalesPorMes = mesesLabel.map((_, i) => servicios.reduce((sum, s) => sum + pagosPorMes(s.nombre)[i], 0));
+    const totalGeneral = totalesPorMes.reduce((sum, v) => sum + v, 0);
+    const filaTotal = `<tr class="total">
+        <td colspan="8">Total</td>
+        <td class="num">${fmt(totalGeneral)}</td>
+        ${totalesPorMes.map((v) => `<td class="num">${fmt(v)}</td>`).join("")}
+        <td class="num">${fmt(totalGeneral)}</td>
+      </tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Servicios</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 4px 5px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        tr.total td { font-weight: 700; background: #FFF2CC; }
+        @media print { body { padding: 0; } table { font-size: 8px; } }
+      </style></head>
+      <body>
+        <h1>Estado de cuenta de Servicios</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr>
+            <th>Estatus</th><th>Nombre</th><th>Categoría</th><th>Método</th>
+            <th class="num">Costo</th><th>Frecuencia</th><th>Tipo</th><th>Últ. Pago</th>
+            <th class="num">Pagado</th>
+            ${mesesLabel.map((m) => `<th class="num">${m}</th>`).join("")}
+            <th class="num">Total año</th>
+          </tr></thead>
+          <tbody>${filas}${filaTotal}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
+
+  function Tarjeta({ s }) {
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: s.activa ? "#fff" : SHEET.gris }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{s.nombre}</p>
+            {s.categoria && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{s.categoria}</p>}
+          </div>
+          <button onClick={() => toggleActiva(s.id)} style={{
+            fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+            border: "1px solid " + SHEET.grisBorde, background: s.activa ? SHEET.verde : "#fff", color: SHEET.texto, flexShrink: 0
+          }}>{s.activa ? "Activo" : "Inactivo"}</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Costo</span><br /><b>{fmt(s.costo)}</b></div>
+          <div><span style={{ color: "#777" }}>Frecuencia</span><br /><b>{s.frecuencia}</b></div>
+          <div><span style={{ color: "#777" }}>Pago</span><br /><b>{s.tipoPago}</b></div>
+          <div><span style={{ color: "#777" }}>Día de pago</span><br /><b>{s.diaPago}</b></div>
+        </div>
+        <p style={{ fontSize: 11, color: "#555", margin: "8px 0 0" }}>
+          {s.metodo}{s.cuenta ? ` · ${s.cuenta}` : ""}{s.ultimoPago ? ` · Últ. pago ${fmtDate(s.ultimoPago)}` : ""}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+      </div>
+      <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
+        Para registrar un pago, ve a Registro → Egreso → Tipo "G. Fijo" → Categoría "Servicios" → elige el servicio.
+      </p>
+      <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activos</h3>
+      {activos.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes servicios activos. Agrégalos desde Datos → Egresos → G. Fijo → Servicios.</p>}
+      {activos.map((s) => <Tarjeta key={s.id} s={s} />)}
+
+      {inactivos.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "16px 0 10px" }}>Inactivos</h3>
+          {inactivos.map((s) => <Tarjeta key={s.id} s={s} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -1529,6 +1824,15 @@ export default function App() {
     guardarCatalogoAhora(actualizado);
   }
 
+  function toggleActivaServicioApp(id) {
+    const actualizado = {
+      ...catalogRef.current,
+      servicios: (catalogRef.current.servicios || []).map((s) => (s.id === id ? { ...s, activa: !s.activa } : s))
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
   }
@@ -1578,6 +1882,7 @@ export default function App() {
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} />}
       {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
       {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "servicios" && <ServiciosTab servicios={catalog.servicios || []} toggleActiva={toggleActivaServicioApp} movimientos={movimientos} userEmail={session.user.email} />}
     </div>
   );
 }
