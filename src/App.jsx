@@ -313,6 +313,8 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [esDiferido, setEsDiferido] = useState(false);
   const [plazoMeses, setPlazoMeses] = useState("");
   const [nombreDiferido, setNombreDiferido] = useState("");
+  const [pagosPrevios, setPagosPrevios] = useState("");
+  const [pagadoPrevio, setPagadoPrevio] = useState("");
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -327,11 +329,13 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   useEffect(() => { setIngresoSub(""); }, [ingresoTipo]);
   useEffect(() => { if (metodo !== "TDC") setEsDiferido(false); }, [metodo]);
   useEffect(() => { if (mov !== "Egreso") setEsDiferido(false); }, [mov]);
+  useEffect(() => { setPagosPrevios(""); setPagadoPrevio(""); }, [plazoMeses]);
 
   function reset() {
     setMetodo(""); setCuenta(""); setTipo(""); setCategoria(""); setSubcategoria("");
     setIngresoTipo(""); setIngresoSub(""); setDescripcion(""); setLugar(""); setCantidad("");
     setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses(""); setNombreDiferido("");
+    setPagosPrevios(""); setPagadoPrevio("");
   }
 
   function validate() {
@@ -362,7 +366,9 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
       const plazo = parseInt(plazoMeses);
       await addDiferido({
         nombre: nombreDiferido, tarjeta: cuenta, categoria, subcategoria, descripcion,
-        costoTotal: amt, plazoMeses: plazo, inicio: fecha
+        costoTotal: amt, plazoMeses: plazo, inicio: fecha,
+        pagosPrevios: pagosPrevios ? parseInt(pagosPrevios) : 0,
+        pagadoPrevio: pagadoPrevio ? parseFloat(pagadoPrevio) : 0
       });
     } else {
       const entry = {
@@ -471,6 +477,32 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                 <p style={{ fontSize: 12, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
                   Mensualidad aproximada: {fmt(parseFloat(cantidad) / parseInt(plazoMeses))} x {plazoMeses} meses
                 </p>
+              )}
+              {plazoMeses && parseInt(plazoMeses) > 1 && (
+                <>
+                  <Field label="¿Ya venías pagando este diferido? (opcional)">
+                    <select value={pagosPrevios} onChange={(e) => {
+                      const n = e.target.value;
+                      setPagosPrevios(n);
+                      const mensualidad = cantidad && parseFloat(cantidad) > 0 && parseInt(plazoMeses) > 0
+                        ? parseFloat(cantidad) / parseInt(plazoMeses) : 0;
+                      setPagadoPrevio(n ? String(Math.round(mensualidad * parseInt(n) * 100) / 100) : "");
+                    }} style={inputBase}>
+                      <option value="">No, es nuevo — empiezo desde el pago 1</option>
+                      {Array.from({ length: parseInt(plazoMeses) - 1 }, (_, i) => i + 1).map((n) => (
+                        <option key={n} value={n}>Ya pagué {n} mensualidad{n > 1 ? "es" : ""} antes de usar la app</option>
+                      ))}
+                    </select>
+                  </Field>
+                  {pagosPrevios && (
+                    <Field label="Monto total ya pagado">
+                      <input type="number" inputMode="decimal" value={pagadoPrevio} onChange={(e) => setPagadoPrevio(e.target.value)} style={inputBase} />
+                      <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                        Te sugerimos este monto, pero puedes ajustarlo si pagaste distinto. Esto no se contará como gasto del mes, solo actualiza el avance del diferido.
+                      </p>
+                    </Field>
+                  )}
+                </>
               )}
             </>
           ) : mov === "Egreso" ? (
@@ -1164,11 +1196,13 @@ export default function App() {
     }
   }
 
-  function addDiferido({ nombre, tarjeta, categoria, subcategoria, descripcion, costoTotal, plazoMeses, inicio }) {
+  function addDiferido({ nombre, tarjeta, categoria, subcategoria, descripcion, costoTotal, plazoMeses, inicio, pagosPrevios = 0, pagadoPrevio = 0 }) {
+    const pagosIniciales = Math.min(Math.max(0, pagosPrevios), plazoMeses - 1);
+    const pagadoInicial = Math.max(0, pagadoPrevio);
     const nuevo = {
-      id: uid(), activo: true, nombre: nombre || "", tarjeta, categoria, subcategoria: subcategoria || "", descripcion: descripcion || "",
+      id: uid(), activo: pagosIniciales < plazoMeses, nombre: nombre || "", tarjeta, categoria, subcategoria: subcategoria || "", descripcion: descripcion || "",
       costoTotal, plazoMeses, aportacion: Math.round((costoTotal / plazoMeses) * 100) / 100,
-      pagos: 0, pagado: 0, ultPago: "", inicio
+      pagos: pagosIniciales, pagado: pagadoInicial, ultPago: "", inicio
     };
     const actualizado = { ...catalogRef.current, diferidos: [nuevo, ...(catalogRef.current.diferidos || [])] };
     setCatalog(actualizado);
