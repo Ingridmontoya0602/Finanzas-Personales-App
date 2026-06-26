@@ -736,7 +736,7 @@ function HistorialTab({ movimientos, deleteMovimiento }) {
             <div style={{ minWidth: 0, flex: 1 }}>
               <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{m.categoria}{m.subcategoria ? ` · ${m.subcategoria}` : ""}</p>
               <p style={{ fontSize: 11, color: "#555", margin: 0, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {fmtDate(m.fecha)} · {m.cuenta}{m.descripcion ? ` · ${m.descripcion}` : ""}{m.lugar ? ` · ${m.lugar}` : ""}
+                {fmtDate(m.fecha)} · {m.cuenta}{m.descripcion ? ` · ${m.descripcion}` : ""}{m.lugar && !m.lugar.startsWith("__diferido:") ? ` · ${m.lugar}` : ""}
               </p>
             </div>
             <div style={{ textAlign: "right", display: "flex", alignItems: "center", gap: 8 }}>
@@ -1152,16 +1152,10 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded || !userId) return;
-    console.log("[guardado] catalog cambió, diferidos:", catalog.diferidos);
     const timer = setTimeout(() => {
-      console.log("[guardado] enviando UPDATE con diferidos:", catalog.diferidos);
-      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", userId)
-        .then(({ error }) => {
-          if (error) console.error("[guardado] ERROR:", error);
-          else console.log("[guardado] OK");
-        });
+      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", userId);
     }, 600);
-    return () => { console.log("[guardado] CANCELADO (catalog volvió a cambiar)"); clearTimeout(timer); };
+    return () => clearTimeout(timer);
   }, [catalog, loaded, userId]);
 
   async function addMovimiento(entry) {
@@ -1170,8 +1164,22 @@ export default function App() {
   }
 
   async function deleteMovimiento(id) {
+    const mov = movimientos.find((m) => m.id === id);
     await supabase.from("movimientos").delete().eq("id", id);
     setMovimientos((prev) => prev.filter((m) => m.id !== id));
+    if (mov && mov.lugar && mov.lugar.startsWith("__diferido:")) {
+      const diferidoId = mov.lugar.slice("__diferido:".length);
+      const monto = Number(mov.cantidad);
+      setCatalog((prev) => ({
+        ...prev,
+        diferidos: (prev.diferidos || []).map((d) => {
+          if (d.id !== diferidoId) return d;
+          const pagosNuevos = Math.max(0, d.pagos - 1);
+          const pagadoNuevo = Math.max(0, Math.round((d.pagado - monto) * 100) / 100);
+          return { ...d, pagos: pagosNuevos, pagado: pagadoNuevo, activo: true };
+        })
+      }));
+    }
   }
 
   function addDiferido({ nombre, tarjeta, categoria, subcategoria, descripcion, costoTotal, plazoMeses, inicio }) {
@@ -1184,33 +1192,24 @@ export default function App() {
   }
 
   async function registrarPagoDiferido(diferidoId, monto, fecha) {
-    console.log("[pago-diferido] iniciando, diferidoId:", diferidoId, "catalog.diferidos actual:", catalog.diferidos);
     const dif = (catalog.diferidos || []).find((d) => d.id === diferidoId);
-    if (!dif) { console.log("[pago-diferido] NO SE ENCONTRÓ el diferido, abortando"); return; }
-    console.log("[pago-diferido] diferido encontrado:", dif);
+    if (!dif) return;
     const etiqueta = dif.nombre || `${dif.categoria}${dif.subcategoria ? " · " + dif.subcategoria : ""}`;
     await addMovimiento({
       mov: "Egreso", metodo: "TDC", cuenta: dif.tarjeta,
       tipo: "Pago TDC", categoria: "Pago TDC", subcategoria: dif.tarjeta,
       descripcion: `Diferido: ${etiqueta}${dif.descripcion ? " · " + dif.descripcion : ""}`,
-      lugar: "", fecha, cantidad: monto
+      lugar: `__diferido:${diferidoId}`, fecha, cantidad: monto
     });
-    console.log("[pago-diferido] movimiento guardado, ahora actualizando catalog...");
-    setCatalog((prev) => {
-      console.log("[pago-diferido] dentro de setCatalog, prev.diferidos:", prev.diferidos);
-      const actualizado = {
-        ...prev,
-        diferidos: (prev.diferidos || []).map((d) => {
-          if (d.id !== diferidoId) return d;
-          const pagosNuevos = d.pagos + 1;
-          const pagadoNuevo = Math.round((d.pagado + monto) * 100) / 100;
-          console.log("[pago-diferido] actualizando diferido", d.id, "pagos:", d.pagos, "->", pagosNuevos);
-          return { ...d, pagos: pagosNuevos, pagado: pagadoNuevo, ultPago: fecha, activo: pagosNuevos < d.plazoMeses };
-        })
-      };
-      console.log("[pago-diferido] catalog.diferidos resultante:", actualizado.diferidos);
-      return actualizado;
-    });
+    setCatalog((prev) => ({
+      ...prev,
+      diferidos: (prev.diferidos || []).map((d) => {
+        if (d.id !== diferidoId) return d;
+        const pagosNuevos = d.pagos + 1;
+        const pagadoNuevo = Math.round((d.pagado + monto) * 100) / 100;
+        return { ...d, pagos: pagosNuevos, pagado: pagadoNuevo, ultPago: fecha, activo: pagosNuevos < d.plazoMeses };
+      })
+    }));
   }
 
   function eliminarDiferido(diferidoId) {
