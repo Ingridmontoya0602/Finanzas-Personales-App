@@ -1237,9 +1237,96 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
   );
 }
 
-function MembresiasTab({ membresias, toggleActiva }) {
+function MembresiasTab({ membresias, toggleActiva, movimientos, userEmail }) {
   const activas = membresias.filter((m) => m.activa);
   const inactivas = membresias.filter((m) => !m.activa);
+  const mesesLabel = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+  function pagosPorMes(nombreMembresia) {
+    const totales = new Array(12).fill(0);
+    movimientos.forEach((mv) => {
+      if (mv.mov === "Egreso" && mv.categoria === "Membresías" && mv.subcategoria === nombreMembresia) {
+        const mesIdx = parseInt(mv.fecha.slice(5, 7), 10) - 1;
+        if (mesIdx >= 0 && mesIdx < 12) totales[mesIdx] += Number(mv.cantidad);
+      }
+    });
+    return totales;
+  }
+
+  function exportarCSV() {
+    const headers = ["Activa/Inactiva", "Nombre", "Categoría", "Método", "Costo", "Frecuencia", "Tipo de pago", ...mesesLabel, "Total año"];
+    const filas = membresias.map((m) => {
+      const porMes = pagosPorMes(m.nombre);
+      const total = porMes.reduce((s, v) => s + v, 0);
+      return [
+        m.activa ? "Activa" : "Inactiva", m.nombre, m.categoria || "", m.metodo || "", m.costo, m.frecuencia, m.tipoPago,
+        ...porMes.map((v) => (v > 0 ? v : "")), total
+      ];
+    });
+    const totalesPorMes = mesesLabel.map((_, i) => membresias.reduce((s, m) => s + pagosPorMes(m.nombre)[i], 0));
+    const totalGeneral = totalesPorMes.reduce((s, v) => s + v, 0);
+    const filaTotal = ["", "Total", "", "", "", "", "", ...totalesPorMes, totalGeneral];
+    const escape = (v) => {
+      const s = String(v ?? "");
+      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const encabezado = [["Estado de cuenta de Membresías"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Membresias_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const filas = membresias.map((m) => {
+      const porMes = pagosPorMes(m.nombre);
+      const total = porMes.reduce((s, v) => s + v, 0);
+      return `<tr>
+        <td>${m.activa ? "Activa" : "Inactiva"}</td>
+        <td>${m.nombre}</td>
+        ${porMes.map((v) => `<td class="num">${v > 0 ? fmt(v) : "-"}</td>`).join("")}
+        <td class="num">${fmt(total)}</td>
+      </tr>`;
+    }).join("");
+    const totalesPorMes = mesesLabel.map((_, i) => membresias.reduce((s, m) => s + pagosPorMes(m.nombre)[i], 0));
+    const totalGeneral = totalesPorMes.reduce((s, v) => s + v, 0);
+    const filaTotal = `<tr class="total">
+        <td colspan="2">Total</td>
+        ${totalesPorMes.map((v) => `<td class="num">${fmt(v)}</td>`).join("")}
+        <td class="num">${fmt(totalGeneral)}</td>
+      </tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Membresías</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        tr.total td { font-weight: 700; background: #FFF2CC; }
+        @media print { body { padding: 0; } }
+      </style></head>
+      <body>
+        <h1>Estado de cuenta de Membresías</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr>
+            <th>Estatus</th><th>Nombre</th>
+            ${mesesLabel.map((m) => `<th class="num">${m}</th>`).join("")}
+            <th class="num">Total año</th>
+          </tr></thead>
+          <tbody>${filas}${filaTotal}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
 
   function Tarjeta({ m }) {
     return (
@@ -1269,6 +1356,10 @@ function MembresiasTab({ membresias, toggleActiva }) {
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+      </div>
       <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
         Para registrar un pago, ve a Registro → Egreso → Tipo "G. Fijo" → Categoría "Membresías" → elige la membresía.
       </p>
@@ -1456,7 +1547,7 @@ export default function App() {
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} />}
       {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
-      {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} />}
+      {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
     </div>
   );
 }
