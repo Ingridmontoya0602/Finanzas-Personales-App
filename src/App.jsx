@@ -309,6 +309,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
   useEffect(() => { setSubcategoria(""); }, [categoria]);
   useEffect(() => { setIngresoSub(""); }, [ingresoTipo]);
   useEffect(() => { if (metodo !== "TDC") setEsDiferido(false); }, [metodo]);
+  useEffect(() => { if (esDiferido) setDiferidoPago(""); }, [esDiferido]);
   useEffect(() => { if (mov !== "Egreso") setEsDiferido(false); }, [mov]);
 
   function reset() {
@@ -420,6 +421,29 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
             </div>
           )}
 
+          {mov === "Egreso" && metodo === "TDC" && !esDiferido && diferidosDeEstaCuenta.length > 0 && (
+            <Field label="Diferidos (opcional)">
+              <select value={diferidoPago} onChange={(e) => {
+                const id = e.target.value;
+                setDiferidoPago(id);
+                const d = diferidosDeEstaCuenta.find((x) => x.id === id);
+                if (d) setCantidad(String(d.aportacion));
+              }} style={selStyle(false)}>
+                <option value="">Selecciona si este pago es de un diferido...</option>
+                {diferidosDeEstaCuenta.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {(d.nombre || `${d.categoria}${d.subcategoria ? " · " + d.subcategoria : ""}`)} (pago {d.pagos + 1}/{d.plazoMeses}, sugerido {fmt(d.aportacion)})
+                  </option>
+                ))}
+              </select>
+              {diferidoPago && (
+                <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                  Te puse la mensualidad sugerida en Cantidad — puedes cambiarla si pagaste distinto.
+                </p>
+              )}
+            </Field>
+          )}
+
           <Field label={esDiferido ? "Costo Total" : "Cantidad"} error={errors.cantidad}>
             <input type="number" inputMode="decimal" placeholder="$0.00" value={cantidad}
               onChange={(e) => { setCantidad(e.target.value); setErrors((p) => ({ ...p, cantidad: false })); }}
@@ -476,23 +500,6 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
                     <option value="">Selecciona...</option>
                     {subcatsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
-                </Field>
-              )}
-              {metodo === "TDC" && diferidosDeEstaCuenta.length > 0 && (
-                <Field label="Diferidos">
-                  <select value={diferidoPago} onChange={(e) => setDiferidoPago(e.target.value)} style={selStyle(false)}>
-                    <option value="">No, es un gasto normal</option>
-                    {diferidosDeEstaCuenta.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {(d.nombre || `${d.categoria}${d.subcategoria ? " · " + d.subcategoria : ""}`)} (pago {d.pagos + 1}/{d.plazoMeses}, sugerido {fmt(d.aportacion)})
-                      </option>
-                    ))}
-                  </select>
-                  {diferidoPago && (
-                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                      Este pago se registrará contra ese diferido en lugar de ser un gasto independiente.
-                    </p>
-                  )}
                 </Field>
               )}
             </>
