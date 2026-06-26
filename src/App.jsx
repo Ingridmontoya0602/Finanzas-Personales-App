@@ -277,7 +277,7 @@ function TabBar({ tab, setTab, onLogout }) {
   );
 }
 
-function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
+function RegistrarTab({ catalog, addMovimiento, addDiferido, registrarPago }) {
   const [mov, setMov] = useState("Egreso");
   const [metodo, setMetodo] = useState("");
   const [cuenta, setCuenta] = useState("");
@@ -293,6 +293,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [esDiferido, setEsDiferido] = useState(false);
   const [plazoMeses, setPlazoMeses] = useState("");
   const [nombreDiferido, setNombreDiferido] = useState("");
+  const [diferidoPago, setDiferidoPago] = useState("");
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -300,8 +301,10 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const categoriasDisponibles = catalog.categorias[tipo] || [];
   const subcatsDisponibles = catalog.subcategorias[categoria] || [];
   const ingresoSubsDisponibles = catalog.ingresoSub[ingresoTipo] || [];
+  const diferidosDeEstaCuenta = (catalog.diferidos || []).filter((d) => d.activo && d.tarjeta === cuenta);
 
   useEffect(() => { setCuenta(""); }, [metodo]);
+  useEffect(() => { setDiferidoPago(""); }, [cuenta]);
   useEffect(() => { setCategoria(""); }, [tipo]);
   useEffect(() => { setSubcategoria(""); }, [categoria]);
   useEffect(() => { setIngresoSub(""); }, [ingresoTipo]);
@@ -311,7 +314,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   function reset() {
     setMetodo(""); setCuenta(""); setTipo(""); setCategoria(""); setSubcategoria("");
     setIngresoTipo(""); setIngresoSub(""); setDescripcion(""); setLugar(""); setCantidad("");
-    setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses(""); setNombreDiferido("");
+    setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses(""); setNombreDiferido(""); setDiferidoPago("");
   }
 
   function validate() {
@@ -344,6 +347,8 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
         nombre: nombreDiferido, tarjeta: cuenta, categoria, subcategoria, descripcion,
         costoTotal: amt, plazoMeses: plazo, inicio: fecha
       });
+    } else if (diferidoPago) {
+      await registrarPago(diferidoPago, amt, fecha);
     } else {
       const entry = {
         mov, metodo, cuenta,
@@ -399,7 +404,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
 
           {mov === "Egreso" && metodo === "TDC" && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, padding: "8px 10px", background: SHEET.gris, borderRadius: 3 }}>
-              <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>¿Es diferido?</span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>¿Deseas agregar un diferido?</span>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => setEsDiferido(true)} style={{
                   padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
@@ -473,6 +478,23 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                   </select>
                 </Field>
               )}
+              {metodo === "TDC" && diferidosDeEstaCuenta.length > 0 && (
+                <Field label="Diferidos">
+                  <select value={diferidoPago} onChange={(e) => setDiferidoPago(e.target.value)} style={selStyle(false)}>
+                    <option value="">No, es un gasto normal</option>
+                    {diferidosDeEstaCuenta.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {(d.nombre || `${d.categoria}${d.subcategoria ? " · " + d.subcategoria : ""}`)} (pago {d.pagos + 1}/{d.plazoMeses}, sugerido {fmt(d.aportacion)})
+                      </option>
+                    ))}
+                  </select>
+                  {diferidoPago && (
+                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                      Este pago se registrará contra ese diferido en lugar de ser un gasto independiente.
+                    </p>
+                  )}
+                </Field>
+              )}
             </>
           ) : (
             <>
@@ -523,7 +545,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
 
           <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
             <Btn primary full onClick={handleSave} style={{ flex: 2 }}>
-              {saved ? "✓ Guardado" : "Guardar movimiento"}
+              {saved ? "✓ Guardado" : diferidoPago ? "Registrar pago" : "Guardar movimiento"}
             </Btn>
             <Btn full onClick={reset} style={{ flex: 1 }}>
               Nuevo
@@ -976,19 +998,10 @@ export default function App() {
 
   useEffect(() => {
     if (!loaded || !userId) return;
-    console.log("[guardado] catalog cambió, programando guardado en 600ms...", catalog.cuentas?.TDC);
     const timer = setTimeout(() => {
-      console.log("[guardado] enviando UPDATE a Supabase ahora...");
-      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", userId)
-        .then(({ error, status, count }) => {
-          if (error) {
-            console.error("[guardado] ERROR al guardar catálogo:", error);
-          } else {
-            console.log("[guardado] OK, status:", status);
-          }
-        });
+      supabase.from("catalogos").update({ data: catalog, updated_at: new Date().toISOString() }).eq("user_id", userId);
     }, 600);
-    return () => { console.log("[guardado] cancelado (catalog volvió a cambiar antes de 600ms)"); clearTimeout(timer); };
+    return () => clearTimeout(timer);
   }, [catalog, loaded, userId]);
 
   async function addMovimiento(entry) {
@@ -1076,7 +1089,7 @@ export default function App() {
           }}>Ir a Datos →</button>
         </div>
       )}
-      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} />}
+      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} registrarPago={registrarPagoDiferido} />}
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} />}
