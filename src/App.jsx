@@ -1038,7 +1038,7 @@ function CatalogosTab({ catalog, setCatalog }) {
   );
 }
 
-function DiferidosTab({ diferidos, registrarPago, eliminarDiferido }) {
+function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail }) {
   const [pagandoId, setPagandoId] = useState(null);
   const [montoPago, setMontoPago] = useState("");
   const [fechaPago, setFechaPago] = useState(todayISO());
@@ -1117,11 +1117,17 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido }) {
         d.ultPago ? fmtDate(d.ultPago) : "", d.inicio ? fmtDate(d.inicio) : "", d.descripcion || ""
       ];
     });
+    const totalCosto = diferidos.reduce((s, d) => s + d.costoTotal, 0);
+    const totalAportacion = diferidos.reduce((s, d) => s + d.aportacion, 0);
+    const totalPagado = diferidos.reduce((s, d) => s + d.pagado, 0);
+    const totalPendiente = diferidos.reduce((s, d) => s + Math.round((d.costoTotal - d.pagado) * 100) / 100, 0);
+    const filaTotal = ["", "Total", "", "", "", totalCosto, "", totalAportacion, "", totalPagado, totalPendiente, "", "", ""];
     const escape = (v) => {
       const s = String(v ?? "");
       return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
     };
-    const csv = [headers, ...filas].map((row) => row.map(escape).join(",")).join("\n");
+    const encabezado = [[`Estado de cuenta de Diferidos TDC`], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -1148,19 +1154,35 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido }) {
         <td>${d.inicio ? fmtDate(d.inicio) : "-"}</td>
       </tr>`;
     }).join("");
+    const totalCosto = diferidos.reduce((s, d) => s + d.costoTotal, 0);
+    const totalAportacion = diferidos.reduce((s, d) => s + d.aportacion, 0);
+    const totalPagado = diferidos.reduce((s, d) => s + d.pagado, 0);
+    const totalPendiente = diferidos.reduce((s, d) => s + Math.round((d.costoTotal - d.pagado) * 100) / 100, 0);
+    const filaTotal = `<tr class="total">
+        <td colspan="4">Total</td>
+        <td class="num">${fmt(totalCosto)}</td>
+        <td></td>
+        <td class="num">${fmt(totalAportacion)}</td>
+        <td></td>
+        <td class="num">${fmt(totalPagado)}</td>
+        <td class="num">${fmt(totalPendiente)}</td>
+        <td></td><td></td>
+      </tr>`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pagos Diferidos TDC</title>
       <style>
         body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
         h1 { font-size: 20px; margin: 0 0 4px; }
-        p.sub { font-size: 12px; color: #555; margin: 0 0 18px; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 14px; }
         th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; }
         th { background: #F4CCCC; font-weight: 700; }
         td.num, th.num { text-align: right; }
+        tr.total td { font-weight: 700; background: #FFF2CC; }
         @media print { body { padding: 0; } }
       </style></head>
       <body>
         <h1>Pagos Diferidos TDC</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
         <p class="sub">Generado el ${fmtDate(todayISO())}</p>
         <table>
           <thead><tr>
@@ -1169,7 +1191,7 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido }) {
             <th class="num">#Pago</th><th class="num">Pagado</th><th class="num">Pendiente</th>
             <th>Últ. Pago</th><th>Inicio</th>
           </tr></thead>
-          <tbody>${filas}</tbody>
+          <tbody>${filas}${filaTotal}</tbody>
         </table>
         <script>window.onload = () => { window.print(); };</script>
       </body></html>`;
@@ -1357,7 +1379,7 @@ export default function App() {
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} />}
-      {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} />}
+      {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
     </div>
   );
 }
