@@ -469,11 +469,6 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                   onChange={(e) => { setPlazoMeses(e.target.value); setErrors((p) => ({ ...p, plazoMeses: false })); }}
                   style={selStyle(errors.plazoMeses)} />
               </Field>
-              {plazoMeses && cantidad && parseFloat(cantidad) > 0 && parseInt(plazoMeses) > 0 && (
-                <p style={{ fontSize: 12, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
-                  Mensualidad aproximada: {fmt(parseFloat(cantidad) / parseInt(plazoMeses))} x {plazoMeses} meses
-                </p>
-              )}
               {plazoMeses && parseInt(plazoMeses) > 1 && (
                 <>
                   <Field label="¿Ya venías pagando este diferido? (opcional)">
@@ -574,6 +569,11 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
               onChange={(e) => { setCantidad(e.target.value); setErrors((p) => ({ ...p, cantidad: false })); }}
               style={{ ...inputBase, fontSize: 22, fontWeight: 700, textAlign: "center", border: errors.cantidad ? `2px solid ${SHEET.rojo}` : `2px solid ${bandBorder}`, background: errors.cantidad ? "#fff" : bandColor }} />
           </Field>
+          {esDiferido && plazoMeses && cantidad && parseFloat(cantidad) > 0 && parseInt(plazoMeses) > 0 && (
+            <p style={{ fontSize: 12, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
+              Mensualidad aproximada: {fmt(parseFloat(cantidad) / parseInt(plazoMeses))} x {plazoMeses} meses
+            </p>
+          )}
 
           <Field label="Descripción">
             <input type="text" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} style={inputBase} placeholder="Ej. Starbucks" />
