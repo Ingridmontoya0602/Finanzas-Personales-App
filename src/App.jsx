@@ -244,6 +244,7 @@ function TabBar({ tab, setTab, onLogout }) {
     { id: "diferidos", label: "Diferidos TDC" },
     { id: "membresias", label: "Membresías" },
     { id: "servicios", label: "Servicios" },
+    { id: "seguros", label: "Seguros" },
     { id: "catalogos", label: "Datos" }
   ];
   const enMenu = menuItems.some((m) => m.id === tab);
@@ -533,13 +534,17 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                     } else if (categoria === "Servicios") {
                       const serv = (catalog.servicios || []).find((s) => s.nombre === v);
                       if (serv) setCantidad(String(serv.costo));
+                    } else if (categoria === "Seguros") {
+                      const seg = (catalog.seguros || []).find((s) => s.nombre === v);
+                      if (seg) setCantidad(String(seg.costo));
                     }
                   }} style={selStyle(errors.subcategoria)}>
                     <option value="">Selecciona...</option>
                     {subcatsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                   {((categoria === "Membresías" && (catalog.membresias || []).some((m) => m.nombre === subcategoria)) ||
-                    (categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria))) && subcategoria && (
+                    (categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria)) ||
+                    (categoria === "Seguros" && (catalog.seguros || []).some((s) => s.nombre === subcategoria))) && subcategoria && (
                     <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
                       Te puse el costo registrado en Cantidad — puedes ajustarlo si pagaste distinto.
                     </p>
@@ -843,6 +848,16 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [servTipo, setServTipo] = useState("Automático");
   const [servDia, setServDia] = useState("1");
   const [editandoServId, setEditandoServId] = useState(null);
+  const [segNombre, setSegNombre] = useState("");
+  const [segCategoria, setSegCategoria] = useState("");
+  const [segPoliza, setSegPoliza] = useState("");
+  const [segMetodo, setSegMetodo] = useState(catalog.metodos[0] || "TDC");
+  const [segCuenta, setSegCuenta] = useState("");
+  const [segCosto, setSegCosto] = useState("");
+  const [segFrecuencia, setSegFrecuencia] = useState("Anual");
+  const [segTipo, setSegTipo] = useState("Manual");
+  const [segDia, setSegDia] = useState("1");
+  const [editandoSegId, setEditandoSegId] = useState(null);
 
   function limpiarFormMembresia() {
     setMemNombre(""); setMemCategoria(""); setMemMetodo(catalog.metodos[0] || "TDC"); setMemCuenta("");
@@ -934,8 +949,54 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
     guardarAhora(actualizado);
   }
 
+  function limpiarFormSeguro() {
+    setSegNombre(""); setSegCategoria(""); setSegPoliza(""); setSegMetodo(catalog.metodos[0] || "TDC"); setSegCuenta("");
+    setSegCosto(""); setSegFrecuencia("Anual"); setSegTipo("Manual"); setSegDia("1"); setEditandoSegId(null);
+  }
+
+  function guardarSeguro() {
+    if (!segNombre || !segCosto || parseFloat(segCosto) <= 0) return;
+    const seg = {
+      id: editandoSegId || uid(), activa: true, nombre: segNombre, categoria: segCategoria, poliza: segPoliza,
+      metodo: segMetodo, cuenta: segCuenta, costo: parseFloat(segCosto),
+      frecuencia: segFrecuencia, tipoPago: segTipo, diaPago: parseInt(segDia) || 1,
+      ultimoPago: ""
+    };
+    const lista = catalog.seguros || [];
+    const yaExiste = lista.some((s) => s.id === seg.id);
+    const nuevosSeguros = yaExiste ? lista.map((s) => (s.id === seg.id ? { ...s, ...seg } : s)) : [seg, ...lista];
+    const subcatsActuales = catalog.subcategorias["Seguros"] || [];
+    const nuevasSubcats = subcatsActuales.includes(segNombre) ? subcatsActuales : [...subcatsActuales, segNombre];
+    const actualizado = {
+      ...catalog,
+      seguros: nuevosSeguros,
+      subcategorias: { ...catalog.subcategorias, "Seguros": nuevasSubcats }
+    };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+    limpiarFormSeguro();
+  }
+
+  function editarSeguro(s) {
+    setEditandoSegId(s.id); setSegNombre(s.nombre); setSegCategoria(s.categoria); setSegPoliza(s.poliza || ""); setSegMetodo(s.metodo);
+    setSegCuenta(s.cuenta); setSegCosto(String(s.costo)); setSegFrecuencia(s.frecuencia); setSegTipo(s.tipoPago); setSegDia(String(s.diaPago));
+  }
+
+  function toggleActivaSeguro(id) {
+    const actualizado = { ...catalog, seguros: (catalog.seguros || []).map((s) => (s.id === id ? { ...s, activa: !s.activa } : s)) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function eliminarSeguro(id) {
+    const actualizado = { ...catalog, seguros: (catalog.seguros || []).filter((s) => s.id !== id) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
   const cuentasMemDisponibles = catalog.cuentas[memMetodo] || [];
   const cuentasServDisponibles = catalog.cuentas[servMetodo] || [];
+  const cuentasSegDisponibles = catalog.cuentas[segMetodo] || [];
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
     { id: "ingresos", label: "Ingresos" },
@@ -992,7 +1053,86 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                   {categoriasDelTipo.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Field>
-              {subcatActual === "Servicios" ? (
+              {subcatActual === "Seguros" ? (
+                <div>
+                  <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+                      {editandoSegId ? "Editar seguro" : "Agregar seguro"}
+                    </p>
+                    <Field label="Nombre">
+                      <input type="text" value={segNombre} onChange={(e) => setSegNombre(e.target.value)} style={inputBase} placeholder="Ej. GNP GMM" />
+                    </Field>
+                    <Field label="Categoría">
+                      <input type="text" value={segCategoria} onChange={(e) => setSegCategoria(e.target.value)} style={inputBase} placeholder="Ej. GMM, Vida, Automotriz" />
+                    </Field>
+                    <Field label="# de Póliza">
+                      <input type="text" value={segPoliza} onChange={(e) => setSegPoliza(e.target.value)} style={inputBase} placeholder="Ej. 00000705567188" />
+                    </Field>
+                    <Field label="Método de pago">
+                      <select value={segMetodo} onChange={(e) => { setSegMetodo(e.target.value); setSegCuenta(""); }} style={inputBase}>
+                        {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </Field>
+                    {cuentasSegDisponibles.length > 0 && (
+                      <Field label="Cuenta / tarjeta">
+                        <select value={segCuenta} onChange={(e) => setSegCuenta(e.target.value)} style={inputBase}>
+                          <option value="">Selecciona...</option>
+                          {cuentasSegDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </Field>
+                    )}
+                    <Field label="Costo">
+                      <input type="number" inputMode="decimal" value={segCosto} onChange={(e) => setSegCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
+                    </Field>
+                    <Field label="Frecuencia">
+                      <select value={segFrecuencia} onChange={(e) => setSegFrecuencia(e.target.value)} style={inputBase}>
+                        {["Semanal", "Quincenal", "Mensual", "Bimestral", "Trimestral", "Semestral", "Anual"].map((f) => (
+                          <option key={f} value={f}>{f}</option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="¿Cómo se paga?">
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {["Automático", "Manual"].map((t) => (
+                          <button key={t} onClick={() => setSegTipo(t)} style={{
+                            flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                            border: segTipo === t ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                            background: segTipo === t ? SHEET.azul : "#fff"
+                          }}>{t}</button>
+                        ))}
+                      </div>
+                    </Field>
+                    <Field label="Día de pago (1-30)">
+                      <input type="number" inputMode="numeric" min="1" max="30" value={segDia} onChange={(e) => setSegDia(e.target.value)} style={inputBase} />
+                    </Field>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      <Btn primary full onClick={guardarSeguro}>{editandoSegId ? "Guardar cambios" : "Agregar seguro"}</Btn>
+                      {editandoSegId && <Btn full onClick={limpiarFormSeguro}>Cancelar</Btn>}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus seguros</p>
+                  {(catalog.seguros || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin seguros aún.</p>}
+                  {(catalog.seguros || []).map((s) => (
+                    <div key={s.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: s.activa ? "#fff" : SHEET.gris }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{s.nombre}</p>
+                        <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                          {fmt(s.costo)} · {s.frecuencia} · {s.tipoPago} · día {s.diaPago}{s.poliza ? ` · Póliza ${s.poliza}` : ""}{s.cuenta ? ` · ${s.cuenta}` : ""}
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                        <button onClick={() => toggleActivaSeguro(s.id)} style={{
+                          fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                          border: "1px solid " + SHEET.grisBorde, background: s.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                        }}>{s.activa ? "Activa" : "Inactiva"}</button>
+                        <button onClick={() => editarSeguro(s)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                        <button onClick={() => eliminarSeguro(s.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : subcatActual === "Servicios" ? (
                 <div>
                   <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
                     <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
@@ -1700,6 +1840,166 @@ function ServiciosTab({ servicios, toggleActiva, movimientos, userEmail }) {
   );
 }
 
+function SegurosTab({ seguros, toggleActiva, movimientos, userEmail }) {
+  const activos = seguros.filter((s) => s.activa);
+  const inactivos = seguros.filter((s) => !s.activa);
+  const mesesLabel = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+  function pagosPorMes(nombreSeguro) {
+    const totales = new Array(12).fill(0);
+    movimientos.forEach((mv) => {
+      if (mv.mov === "Egreso" && mv.categoria === "Seguros" && mv.subcategoria === nombreSeguro) {
+        const mesIdx = parseInt(mv.fecha.slice(5, 7), 10) - 1;
+        if (mesIdx >= 0 && mesIdx < 12) totales[mesIdx] += Number(mv.cantidad);
+      }
+    });
+    return totales;
+  }
+
+  function ultimoPagoDe(nombreSeguro) {
+    const pagos = movimientos.filter((mv) => mv.mov === "Egreso" && mv.categoria === "Seguros" && mv.subcategoria === nombreSeguro);
+    if (pagos.length === 0) return null;
+    return pagos.reduce((max, mv) => (mv.fecha > max ? mv.fecha : max), pagos[0].fecha);
+  }
+
+  function exportarCSV() {
+    const headers = ["Activa/Inactiva", "Nombre", "Categoría", "# de Póliza", "Método", "Costo", "Frecuencia", "Tipo de pago", "Últ. Pago", "Pagado", ...mesesLabel, "Total año"];
+    const filas = seguros.map((s) => {
+      const porMes = pagosPorMes(s.nombre);
+      const totalAnio = porMes.reduce((sum, v) => sum + v, 0);
+      const ultPago = ultimoPagoDe(s.nombre);
+      return [
+        s.activa ? "Activa" : "Inactiva", s.nombre, s.categoria || "", s.poliza || "", s.metodo || "", s.costo, s.frecuencia, s.tipoPago,
+        ultPago ? fmtDate(ultPago) : "", totalAnio,
+        ...porMes.map((v) => (v > 0 ? v : "")), totalAnio
+      ];
+    });
+    const totalesPorMes = mesesLabel.map((_, i) => seguros.reduce((sum, s) => sum + pagosPorMes(s.nombre)[i], 0));
+    const totalGeneral = totalesPorMes.reduce((sum, v) => sum + v, 0);
+    const filaTotal = ["", "Total", "", "", "", "", "", "", "", totalGeneral, ...totalesPorMes, totalGeneral];
+    const escape = (v) => {
+      const str = String(v ?? "");
+      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const encabezado = [["Estado de cuenta de Seguros"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Seguros_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const filas = seguros.map((s) => {
+      const porMes = pagosPorMes(s.nombre);
+      const totalAnio = porMes.reduce((sum, v) => sum + v, 0);
+      const ultPago = ultimoPagoDe(s.nombre);
+      return `<tr>
+        <td>${s.activa ? "Activa" : "Inactiva"}</td>
+        <td>${s.nombre}</td>
+        <td>${s.categoria || "-"}</td>
+        <td>${s.poliza || "-"}</td>
+        <td>${s.metodo || "-"}</td>
+        <td class="num">${fmt(s.costo)}</td>
+        <td>${s.frecuencia}</td>
+        <td>${s.tipoPago}</td>
+        <td>${ultPago ? fmtDate(ultPago) : "-"}</td>
+        <td class="num">${fmt(totalAnio)}</td>
+        ${porMes.map((v) => `<td class="num">${v > 0 ? fmt(v) : "-"}</td>`).join("")}
+        <td class="num">${fmt(totalAnio)}</td>
+      </tr>`;
+    }).join("");
+    const totalesPorMes = mesesLabel.map((_, i) => seguros.reduce((sum, s) => sum + pagosPorMes(s.nombre)[i], 0));
+    const totalGeneral = totalesPorMes.reduce((sum, v) => sum + v, 0);
+    const filaTotal = `<tr class="total">
+        <td colspan="9">Total</td>
+        <td class="num">${fmt(totalGeneral)}</td>
+        ${totalesPorMes.map((v) => `<td class="num">${fmt(v)}</td>`).join("")}
+        <td class="num">${fmt(totalGeneral)}</td>
+      </tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Seguros</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 4px 5px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        tr.total td { font-weight: 700; background: #FFF2CC; }
+        @media print { body { padding: 0; } table { font-size: 8px; } }
+      </style></head>
+      <body>
+        <h1>Estado de cuenta de Seguros</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr>
+            <th>Estatus</th><th>Nombre</th><th>Categoría</th><th># Póliza</th><th>Método</th>
+            <th class="num">Costo</th><th>Frecuencia</th><th>Tipo</th><th>Últ. Pago</th>
+            <th class="num">Pagado</th>
+            ${mesesLabel.map((m) => `<th class="num">${m}</th>`).join("")}
+            <th class="num">Total año</th>
+          </tr></thead>
+          <tbody>${filas}${filaTotal}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
+
+  function Tarjeta({ s }) {
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: s.activa ? "#fff" : SHEET.gris }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{s.nombre}</p>
+            {s.categoria && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{s.categoria}{s.poliza ? ` · Póliza ${s.poliza}` : ""}</p>}
+          </div>
+          <button onClick={() => toggleActiva(s.id)} style={{
+            fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+            border: "1px solid " + SHEET.grisBorde, background: s.activa ? SHEET.verde : "#fff", color: SHEET.texto, flexShrink: 0
+          }}>{s.activa ? "Activa" : "Inactiva"}</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Costo</span><br /><b>{fmt(s.costo)}</b></div>
+          <div><span style={{ color: "#777" }}>Frecuencia</span><br /><b>{s.frecuencia}</b></div>
+          <div><span style={{ color: "#777" }}>Pago</span><br /><b>{s.tipoPago}</b></div>
+          <div><span style={{ color: "#777" }}>Día de pago</span><br /><b>{s.diaPago}</b></div>
+        </div>
+        <p style={{ fontSize: 11, color: "#555", margin: "8px 0 0" }}>
+          {s.metodo}{s.cuenta ? ` · ${s.cuenta}` : ""}{s.ultimoPago ? ` · Últ. pago ${fmtDate(s.ultimoPago)}` : ""}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+      </div>
+      <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
+        Para registrar un pago, ve a Registro → Egreso → Tipo "G. Fijo" → Categoría "Seguros" → elige el seguro.
+      </p>
+      <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activas</h3>
+      {activos.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes seguros activos. Agrégalos desde Datos → Egresos → G. Fijo → Seguros.</p>}
+      {activos.map((s) => <Tarjeta key={s.id} s={s} />)}
+
+      {inactivos.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "16px 0 10px" }}>Inactivas</h3>
+          {inactivos.map((s) => <Tarjeta key={s.id} s={s} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -1833,6 +2133,15 @@ export default function App() {
     guardarCatalogoAhora(actualizado);
   }
 
+  function toggleActivaSeguroApp(id) {
+    const actualizado = {
+      ...catalogRef.current,
+      seguros: (catalogRef.current.seguros || []).map((s) => (s.id === id ? { ...s, activa: !s.activa } : s))
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
   }
@@ -1883,6 +2192,7 @@ export default function App() {
       {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
       {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "servicios" && <ServiciosTab servicios={catalog.servicios || []} toggleActiva={toggleActivaServicioApp} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "seguros" && <SegurosTab seguros={catalog.seguros || []} toggleActiva={toggleActivaSeguroApp} movimientos={movimientos} userEmail={session.user.email} />}
     </div>
   );
 }
