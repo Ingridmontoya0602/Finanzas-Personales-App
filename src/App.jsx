@@ -445,13 +445,6 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
           )}
 
 
-
-          <Field label={esDiferido ? "Costo Total" : "Cantidad"} error={errors.cantidad}>
-            <input type="number" inputMode="decimal" placeholder="$0.00" value={cantidad}
-              onChange={(e) => { setCantidad(e.target.value); setErrors((p) => ({ ...p, cantidad: false })); }}
-              style={{ ...inputBase, fontSize: 22, fontWeight: 700, textAlign: "center", border: errors.cantidad ? `2px solid ${SHEET.rojo}` : `2px solid ${bandBorder}`, background: errors.cantidad ? "#fff" : bandColor }} />
-          </Field>
-
           {esDiferido ? (
             <>
               <Field label="Nombre del diferido (opcional)">
@@ -575,6 +568,12 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
               )}
             </>
           )}
+
+          <Field label={esDiferido ? "Costo Total" : "Cantidad"} error={errors.cantidad}>
+            <input type="number" inputMode="decimal" placeholder="$0.00" value={cantidad}
+              onChange={(e) => { setCantidad(e.target.value); setErrors((p) => ({ ...p, cantidad: false })); }}
+              style={{ ...inputBase, fontSize: 22, fontWeight: 700, textAlign: "center", border: errors.cantidad ? `2px solid ${SHEET.rojo}` : `2px solid ${bandBorder}`, background: errors.cantidad ? "#fff" : bandColor }} />
+          </Field>
 
           <Field label="Descripción">
             <input type="text" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} style={inputBase} placeholder="Ej. Starbucks" />
