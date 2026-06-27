@@ -533,7 +533,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                       if (mem) setCantidad(String(mem.costo));
                     } else if (categoria === "Servicios") {
                       const serv = (catalog.servicios || []).find((s) => s.nombre === v);
-                      if (serv) setCantidad(String(serv.costo));
+                      if (serv && !serv.esVariable) setCantidad(String(serv.costo));
                     } else if (categoria === "Seguros") {
                       const seg = (catalog.seguros || []).find((s) => s.nombre === v);
                       if (seg) setCantidad(String(seg.costo));
@@ -543,10 +543,15 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                     {subcatsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                   {((categoria === "Membresías" && (catalog.membresias || []).some((m) => m.nombre === subcategoria)) ||
-                    (categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria)) ||
+                    (categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria && !s.esVariable)) ||
                     (categoria === "Seguros" && (catalog.seguros || []).some((s) => s.nombre === subcategoria))) && subcategoria && (
                     <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
                       Te puse el costo registrado en Cantidad — puedes ajustarlo si pagaste distinto.
+                    </p>
+                  )}
+                  {categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria && s.esVariable) && (
+                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                      Este servicio es de monto variable — captura el total que pagaste este mes en Cantidad.
                     </p>
                   )}
                 </Field>
@@ -847,6 +852,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [servFrecuencia, setServFrecuencia] = useState("Mensual");
   const [servTipo, setServTipo] = useState("Automático");
   const [servDia, setServDia] = useState("1");
+  const [servVariable, setServVariable] = useState(false);
   const [editandoServId, setEditandoServId] = useState(null);
   const [segNombre, setSegNombre] = useState("");
   const [segCategoria, setSegCategoria] = useState("");
@@ -906,14 +912,15 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
 
   function limpiarFormServicio() {
     setServNombre(""); setServCategoria(""); setServMetodo(catalog.metodos[0] || "TDC"); setServCuenta("");
-    setServCosto(""); setServFrecuencia("Mensual"); setServTipo("Automático"); setServDia("1"); setEditandoServId(null);
+    setServCosto(""); setServFrecuencia("Mensual"); setServTipo("Automático"); setServDia("1"); setServVariable(false); setEditandoServId(null);
   }
 
   function guardarServicio() {
-    if (!servNombre || !servCosto || parseFloat(servCosto) <= 0) return;
+    if (!servNombre) return;
+    if (!servVariable && (!servCosto || parseFloat(servCosto) <= 0)) return;
     const serv = {
       id: editandoServId || uid(), activa: true, nombre: servNombre, categoria: servCategoria,
-      metodo: servMetodo, cuenta: servCuenta, costo: parseFloat(servCosto),
+      metodo: servMetodo, cuenta: servCuenta, costo: servVariable ? 0 : parseFloat(servCosto), esVariable: servVariable,
       frecuencia: servFrecuencia, tipoPago: servTipo, diaPago: parseInt(servDia) || 1,
       ultimoPago: ""
     };
@@ -934,7 +941,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
 
   function editarServicio(s) {
     setEditandoServId(s.id); setServNombre(s.nombre); setServCategoria(s.categoria); setServMetodo(s.metodo);
-    setServCuenta(s.cuenta); setServCosto(String(s.costo)); setServFrecuencia(s.frecuencia); setServTipo(s.tipoPago); setServDia(String(s.diaPago));
+    setServCuenta(s.cuenta); setServCosto(s.esVariable ? "" : String(s.costo)); setServFrecuencia(s.frecuencia); setServTipo(s.tipoPago); setServDia(String(s.diaPago)); setServVariable(!!s.esVariable);
   }
 
   function toggleActivaServicio(id) {
@@ -1157,9 +1164,26 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                         </select>
                       </Field>
                     )}
-                    <Field label="Costo">
-                      <input type="number" inputMode="decimal" value={servCosto} onChange={(e) => setServCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
-                    </Field>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, padding: "8px 10px", background: SHEET.gris, borderRadius: 3 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>¿Es de monto variable? (ej. luz, agua, gas)</span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => { setServVariable(true); setServCosto(""); }} style={{
+                          padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                          border: servVariable ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                          background: servVariable ? SHEET.azul : "#fff"
+                        }}>Sí</button>
+                        <button onClick={() => setServVariable(false)} style={{
+                          padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                          border: !servVariable ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                          background: !servVariable ? SHEET.azul : "#fff"
+                        }}>No</button>
+                      </div>
+                    </div>
+                    {!servVariable && (
+                      <Field label="Costo">
+                        <input type="number" inputMode="decimal" value={servCosto} onChange={(e) => setServCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
+                      </Field>
+                    )}
                     <Field label="Frecuencia">
                       <select value={servFrecuencia} onChange={(e) => setServFrecuencia(e.target.value)} style={inputBase}>
                         {["Semanal", "Quincenal", "Mensual", "Bimestral", "Trimestral", "Semestral", "Anual"].map((f) => (
@@ -1167,6 +1191,11 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                         ))}
                       </select>
                     </Field>
+                    {servVariable && (
+                      <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
+                        No pasa nada, registra el monto real cada vez que pagues desde Registro.
+                      </p>
+                    )}
                     <Field label="¿Cómo se paga?">
                       <div style={{ display: "flex", gap: 6 }}>
                         {["Automático", "Manual"].map((t) => (
@@ -1194,7 +1223,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                       <div style={{ minWidth: 0 }}>
                         <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{s.nombre}</p>
                         <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
-                          {fmt(s.costo)} · {s.frecuencia} · {s.tipoPago} · día {s.diaPago}{s.cuenta ? ` · ${s.cuenta}` : ""}
+                          {s.esVariable ? "Variable" : fmt(s.costo)} · {s.frecuencia} · {s.tipoPago} · día {s.diaPago}{s.cuenta ? ` · ${s.cuenta}` : ""}
                         </p>
                       </div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
@@ -1742,7 +1771,7 @@ function ServiciosTab({ servicios, toggleActiva, movimientos, userEmail }) {
         <td>${s.nombre}</td>
         <td>${s.categoria || "-"}</td>
         <td>${s.metodo || "-"}</td>
-        <td class="num">${fmt(s.costo)}</td>
+        <td class="num">${s.esVariable ? "Variable" : fmt(s.costo)}</td>
         <td>${s.frecuencia}</td>
         <td>${s.tipoPago}</td>
         <td>${ultPago ? fmtDate(ultPago) : "-"}</td>
@@ -1805,7 +1834,7 @@ function ServiciosTab({ servicios, toggleActiva, movimientos, userEmail }) {
           }}>{s.activa ? "Activo" : "Inactivo"}</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
-          <div><span style={{ color: "#777" }}>Costo</span><br /><b>{fmt(s.costo)}</b></div>
+          <div><span style={{ color: "#777" }}>Costo</span><br /><b>{s.esVariable ? "Variable" : fmt(s.costo)}</b></div>
           <div><span style={{ color: "#777" }}>Frecuencia</span><br /><b>{s.frecuencia}</b></div>
           <div><span style={{ color: "#777" }}>Pago</span><br /><b>{s.tipoPago}</b></div>
           <div><span style={{ color: "#777" }}>Día de pago</span><br /><b>{s.diaPago}</b></div>
