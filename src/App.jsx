@@ -82,6 +82,8 @@ const DEFAULT_CATALOG = {
   prestamos: [],
   familiares: [],
   diferidos: [],
+  ahorros: [],
+  inversiones: [],
   _bannerVisto: false
 };
 
@@ -245,6 +247,8 @@ function TabBar({ tab, setTab, onLogout }) {
     { id: "membresias", label: "Membresías" },
     { id: "servicios", label: "Servicios" },
     { id: "seguros", label: "Seguros" },
+    { id: "ahorro", label: "Ahorro" },
+    { id: "inversion", label: "Inversión" },
     { id: "catalogos", label: "Datos" }
   ];
   const enMenu = menuItems.some((m) => m.id === tab);
@@ -505,10 +509,27 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                 </select>
               </Field>
               <Field label="Categoría" error={errors.categoria}>
-                <select value={categoria} onChange={(e) => { setCategoria(e.target.value); setErrors((p) => ({ ...p, categoria: false })); }} style={selStyle(errors.categoria)} disabled={!tipo}>
+                <select value={categoria} onChange={(e) => {
+                  const v = e.target.value;
+                  setCategoria(v);
+                  setErrors((p) => ({ ...p, categoria: false }));
+                  if (tipo === "Ahorro") {
+                    const aho = (catalog.ahorros || []).find((a) => a.nombre === v);
+                    if (aho) setCantidad(String(aho.aportacion));
+                  } else if (tipo === "Inversión") {
+                    const inv = (catalog.inversiones || []).find((i) => i.nombre === v);
+                    if (inv) setCantidad(String(inv.aportacion));
+                  }
+                }} style={selStyle(errors.categoria)} disabled={!tipo}>
                   <option value="">{tipo ? "Selecciona..." : "Primero elige Tipo"}</option>
                   {categoriasDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
+                {((tipo === "Ahorro" && (catalog.ahorros || []).some((a) => a.nombre === categoria)) ||
+                  (tipo === "Inversión" && (catalog.inversiones || []).some((i) => i.nombre === categoria))) && categoria && (
+                  <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                    Te puse la aportación registrada en Cantidad — puedes ajustarla si metiste distinto.
+                  </p>
+                )}
               </Field>
               {categoria && subcatsDisponibles.length > 0 && (
                 <Field label="Subcategoría" error={errors.subcategoria}>
@@ -863,6 +884,25 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [segTipo, setSegTipo] = useState("Manual");
   const [segDia, setSegDia] = useState("1");
   const [editandoSegId, setEditandoSegId] = useState(null);
+  const [ahoNombre, setAhoNombre] = useState("");
+  const [ahoCategoria, setAhoCategoria] = useState("");
+  const [ahoDescripcion, setAhoDescripcion] = useState("");
+  const [ahoMetodo, setAhoMetodo] = useState(catalog.metodos[0] || "Efectivo");
+  const [ahoCuenta, setAhoCuenta] = useState("");
+  const [ahoMeta, setAhoMeta] = useState("");
+  const [ahoPlazo, setAhoPlazo] = useState("");
+  const [ahoAportacion, setAhoAportacion] = useState("");
+  const [editandoAhoId, setEditandoAhoId] = useState(null);
+  const [invNombre, setInvNombre] = useState("");
+  const [invCategoria, setInvCategoria] = useState("");
+  const [invDescripcion, setInvDescripcion] = useState("");
+  const [invObjetivo, setInvObjetivo] = useState("");
+  const [invMetodo, setInvMetodo] = useState(catalog.metodos[0] || "Efectivo");
+  const [invCuenta, setInvCuenta] = useState("");
+  const [invMeta, setInvMeta] = useState("");
+  const [invPlazo, setInvPlazo] = useState("");
+  const [invAportacion, setInvAportacion] = useState("");
+  const [editandoInvId, setEditandoInvId] = useState(null);
 
   function limpiarFormMembresia() {
     setMemNombre(""); setMemCategoria(""); setMemMetodo(catalog.metodos[0] || "TDC"); setMemCuenta("");
@@ -1000,6 +1040,96 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
     guardarAhora(actualizado);
   }
 
+  function limpiarFormAhorro() {
+    setAhoNombre(""); setAhoCategoria(""); setAhoDescripcion(""); setAhoMetodo(catalog.metodos[0] || "Efectivo"); setAhoCuenta("");
+    setAhoMeta(""); setAhoPlazo(""); setAhoAportacion(""); setEditandoAhoId(null);
+  }
+
+  function guardarAhorro() {
+    if (!ahoNombre || !ahoMeta || parseFloat(ahoMeta) <= 0) return;
+    const aho = {
+      id: editandoAhoId || uid(), activa: true, nombre: ahoNombre, categoria: ahoCategoria, descripcion: ahoDescripcion,
+      metodo: ahoMetodo, cuenta: ahoCuenta, meta: parseFloat(ahoMeta), plazoMeses: parseInt(ahoPlazo) || 0,
+      aportacion: parseFloat(ahoAportacion) || 0, acumulado: 0, ultimoPago: ""
+    };
+    const lista = catalog.ahorros || [];
+    const yaExiste = lista.some((a) => a.id === aho.id);
+    const nuevosAhorros = yaExiste ? lista.map((a) => (a.id === aho.id ? { ...a, ...aho } : a)) : [aho, ...lista];
+    const subcatsActuales = catalog.subcategorias["Ahorro"] || [];
+    const nuevasSubcats = subcatsActuales.includes(ahoNombre) ? subcatsActuales : [...subcatsActuales, ahoNombre];
+    const actualizado = {
+      ...catalog,
+      ahorros: nuevosAhorros,
+      categorias: { ...catalog.categorias, "Ahorro": (catalog.categorias["Ahorro"] || []).includes(ahoNombre) ? catalog.categorias["Ahorro"] : [...(catalog.categorias["Ahorro"] || []), ahoNombre] },
+      subcategorias: { ...catalog.subcategorias, "Ahorro": nuevasSubcats }
+    };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+    limpiarFormAhorro();
+  }
+
+  function editarAhorro(a) {
+    setEditandoAhoId(a.id); setAhoNombre(a.nombre); setAhoCategoria(a.categoria); setAhoDescripcion(a.descripcion || ""); setAhoMetodo(a.metodo);
+    setAhoCuenta(a.cuenta); setAhoMeta(String(a.meta)); setAhoPlazo(String(a.plazoMeses)); setAhoAportacion(String(a.aportacion));
+  }
+
+  function toggleActivaAhorro(id) {
+    const actualizado = { ...catalog, ahorros: (catalog.ahorros || []).map((a) => (a.id === id ? { ...a, activa: !a.activa } : a)) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function eliminarAhorro(id) {
+    const actualizado = { ...catalog, ahorros: (catalog.ahorros || []).filter((a) => a.id !== id) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function limpiarFormInversion() {
+    setInvNombre(""); setInvCategoria(""); setInvDescripcion(""); setInvObjetivo(""); setInvMetodo(catalog.metodos[0] || "Efectivo"); setInvCuenta("");
+    setInvMeta(""); setInvPlazo(""); setInvAportacion(""); setEditandoInvId(null);
+  }
+
+  function guardarInversion() {
+    if (!invNombre || !invMeta || parseFloat(invMeta) <= 0) return;
+    const inv = {
+      id: editandoInvId || uid(), activa: true, nombre: invNombre, categoria: invCategoria, descripcion: invDescripcion, objetivo: invObjetivo,
+      metodo: invMetodo, cuenta: invCuenta, meta: parseFloat(invMeta), plazoMeses: parseInt(invPlazo) || 0,
+      aportacion: parseFloat(invAportacion) || 0, acumulado: 0, ultimoPago: ""
+    };
+    const lista = catalog.inversiones || [];
+    const yaExiste = lista.some((i) => i.id === inv.id);
+    const nuevasInversiones = yaExiste ? lista.map((i) => (i.id === inv.id ? { ...i, ...inv } : i)) : [inv, ...lista];
+    const subcatsActuales = catalog.subcategorias["Inversión"] || [];
+    const nuevasSubcats = subcatsActuales.includes(invNombre) ? subcatsActuales : [...subcatsActuales, invNombre];
+    const actualizado = {
+      ...catalog,
+      inversiones: nuevasInversiones,
+      categorias: { ...catalog.categorias, "Inversión": (catalog.categorias["Inversión"] || []).includes(invNombre) ? catalog.categorias["Inversión"] : [...(catalog.categorias["Inversión"] || []), invNombre] },
+      subcategorias: { ...catalog.subcategorias, "Inversión": nuevasSubcats }
+    };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+    limpiarFormInversion();
+  }
+
+  function editarInversion(i) {
+    setEditandoInvId(i.id); setInvNombre(i.nombre); setInvCategoria(i.categoria); setInvDescripcion(i.descripcion || ""); setInvObjetivo(i.objetivo || ""); setInvMetodo(i.metodo);
+    setInvCuenta(i.cuenta); setInvMeta(String(i.meta)); setInvPlazo(String(i.plazoMeses)); setInvAportacion(String(i.aportacion));
+  }
+
+  function toggleActivaInversion(id) {
+    const actualizado = { ...catalog, inversiones: (catalog.inversiones || []).map((i) => (i.id === id ? { ...i, activa: !i.activa } : i)) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function eliminarInversion(id) {
+    const actualizado = { ...catalog, inversiones: (catalog.inversiones || []).filter((i) => i.id !== id) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
   const cuentasMemDisponibles = catalog.cuentas[memMetodo] || [];
   const cuentasServDisponibles = catalog.cuentas[servMetodo] || [];
   const cuentasSegDisponibles = catalog.cuentas[segMetodo] || [];
@@ -1041,20 +1171,153 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
               {Object.keys(catalog.categorias).map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
           </Field>
-          <ListEditor title={`Categorías de ${newCatTipo}`} items={categoriasDelTipo}
-            onAdd={(v) => {
-              const next = JSON.parse(JSON.stringify(catalog));
-              if (!Array.isArray(next.categorias[newCatTipo])) next.categorias[newCatTipo] = [];
-              if (!next.categorias[newCatTipo].includes(v)) next.categorias[newCatTipo].push(v);
-              if (!next.subcategorias[v]) next.subcategorias[v] = [];
-              setCatalog(next);
-              guardarAhora(next);
-              setNewSubcatCategoria(v);
-            }}
-            onRemove={(v) => removeFromList(["categorias", newCatTipo], v)} />
-          {categoriasDelTipo.length > 0 && (
+          {newCatTipo === "Ahorro" ? (
+            <div>
+              <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+                  {editandoAhoId ? "Editar ahorro" : "Agregar ahorro"}
+                </p>
+                <Field label="Nombre">
+                  <input type="text" value={ahoNombre} onChange={(e) => setAhoNombre(e.target.value)} style={inputBase} placeholder="Ej. Laptop, Viaje" />
+                </Field>
+                <Field label="Categoría">
+                  <input type="text" value={ahoCategoria} onChange={(e) => setAhoCategoria(e.target.value)} style={inputBase} placeholder="Ej. Tecnología, Viajes" />
+                </Field>
+                <Field label="Descripción (opcional)">
+                  <input type="text" value={ahoDescripcion} onChange={(e) => setAhoDescripcion(e.target.value)} style={inputBase} />
+                </Field>
+                <Field label="Método">
+                  <select value={ahoMetodo} onChange={(e) => { setAhoMetodo(e.target.value); setAhoCuenta(""); }} style={inputBase}>
+                    {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </Field>
+                {(catalog.cuentas[ahoMetodo] || []).length > 0 && (
+                  <Field label="Cuenta">
+                    <select value={ahoCuenta} onChange={(e) => setAhoCuenta(e.target.value)} style={inputBase}>
+                      <option value="">Selecciona...</option>
+                      {(catalog.cuentas[ahoMetodo] || []).map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </Field>
+                )}
+                <Field label="Meta (monto total a ahorrar)">
+                  <input type="number" inputMode="decimal" value={ahoMeta} onChange={(e) => setAhoMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
+                </Field>
+                <Field label="Plazo (meses)">
+                  <input type="number" inputMode="numeric" value={ahoPlazo} onChange={(e) => setAhoPlazo(e.target.value)} style={inputBase} placeholder="Ej. 12" />
+                </Field>
+                <Field label="Aportación (cuánto metes cada vez)">
+                  <input type="number" inputMode="decimal" value={ahoAportacion} onChange={(e) => setAhoAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
+                </Field>
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <Btn primary full onClick={guardarAhorro}>{editandoAhoId ? "Guardar cambios" : "Agregar ahorro"}</Btn>
+                  {editandoAhoId && <Btn full onClick={limpiarFormAhorro}>Cancelar</Btn>}
+                </div>
+              </div>
+
+              <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus ahorros</p>
+              {(catalog.ahorros || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin ahorros aún.</p>}
+              {(catalog.ahorros || []).map((a) => (
+                <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: a.activa ? "#fff" : SHEET.gris }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{a.nombre}</p>
+                    <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                      Meta {fmt(a.meta)} · Aportación {fmt(a.aportacion)} · {a.plazoMeses} meses
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <button onClick={() => toggleActivaAhorro(a.id)} style={{
+                      fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                      border: "1px solid " + SHEET.grisBorde, background: a.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                    }}>{a.activa ? "Activa" : "Inactiva"}</button>
+                    <button onClick={() => editarAhorro(a)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                    <button onClick={() => eliminarAhorro(a.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : newCatTipo === "Inversión" ? (
+            <div>
+              <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+                  {editandoInvId ? "Editar inversión" : "Agregar inversión"}
+                </p>
+                <Field label="Nombre">
+                  <input type="text" value={invNombre} onChange={(e) => setInvNombre(e.target.value)} style={inputBase} placeholder="Ej. GBM-1" />
+                </Field>
+                <Field label="Categoría">
+                  <input type="text" value={invCategoria} onChange={(e) => setInvCategoria(e.target.value)} style={inputBase} placeholder="Ej. GBM, Interbrokers" />
+                </Field>
+                <Field label="Descripción (opcional)">
+                  <input type="text" value={invDescripcion} onChange={(e) => setInvDescripcion(e.target.value)} style={inputBase} />
+                </Field>
+                <Field label="Objetivo (opcional)">
+                  <input type="text" value={invObjetivo} onChange={(e) => setInvObjetivo(e.target.value)} style={inputBase} placeholder="Ej. Retiro, Fondo de emergencia" />
+                </Field>
+                <Field label="Método">
+                  <select value={invMetodo} onChange={(e) => { setInvMetodo(e.target.value); setInvCuenta(""); }} style={inputBase}>
+                    {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </Field>
+                {(catalog.cuentas[invMetodo] || []).length > 0 && (
+                  <Field label="Cuenta">
+                    <select value={invCuenta} onChange={(e) => setInvCuenta(e.target.value)} style={inputBase}>
+                      <option value="">Selecciona...</option>
+                      {(catalog.cuentas[invMetodo] || []).map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </Field>
+                )}
+                <Field label="Meta (monto total a invertir)">
+                  <input type="number" inputMode="decimal" value={invMeta} onChange={(e) => setInvMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
+                </Field>
+                <Field label="Plazo (meses)">
+                  <input type="number" inputMode="numeric" value={invPlazo} onChange={(e) => setInvPlazo(e.target.value)} style={inputBase} placeholder="Ej. 24" />
+                </Field>
+                <Field label="Aportación (cuánto metes cada vez)">
+                  <input type="number" inputMode="decimal" value={invAportacion} onChange={(e) => setInvAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
+                </Field>
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <Btn primary full onClick={guardarInversion}>{editandoInvId ? "Guardar cambios" : "Agregar inversión"}</Btn>
+                  {editandoInvId && <Btn full onClick={limpiarFormInversion}>Cancelar</Btn>}
+                </div>
+              </div>
+
+              <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus inversiones</p>
+              {(catalog.inversiones || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin inversiones aún.</p>}
+              {(catalog.inversiones || []).map((i) => (
+                <div key={i.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: i.activa ? "#fff" : SHEET.gris }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{i.nombre}</p>
+                    <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                      Meta {fmt(i.meta)} · Aportación {fmt(i.aportacion)} · {i.plazoMeses} meses
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <button onClick={() => toggleActivaInversion(i.id)} style={{
+                      fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                      border: "1px solid " + SHEET.grisBorde, background: i.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                    }}>{i.activa ? "Activa" : "Inactiva"}</button>
+                    <button onClick={() => editarInversion(i)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                    <button onClick={() => eliminarInversion(i.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
             <>
-              <Field label="Categoría">
+              <ListEditor title={`Categorías de ${newCatTipo}`} items={categoriasDelTipo}
+                onAdd={(v) => {
+                  const next = JSON.parse(JSON.stringify(catalog));
+                  if (!Array.isArray(next.categorias[newCatTipo])) next.categorias[newCatTipo] = [];
+                  if (!next.categorias[newCatTipo].includes(v)) next.categorias[newCatTipo].push(v);
+                  if (!next.subcategorias[v]) next.subcategorias[v] = [];
+                  setCatalog(next);
+                  guardarAhora(next);
+                  setNewSubcatCategoria(v);
+                }}
+                onRemove={(v) => removeFromList(["categorias", newCatTipo], v)} />
+              {categoriasDelTipo.length > 0 && (
+                <>
+                  <Field label="Categoría">
                 <select value={subcatActual} onChange={(e) => setNewSubcatCategoria(e.target.value)} style={inputBase}>
                   {categoriasDelTipo.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
@@ -1316,6 +1579,8 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                 <ListEditor title={`Subcategorías de ${subcatActual}`} items={catalog.subcategorias[subcatActual] || []}
                   onAdd={(v) => addToList(["subcategorias", subcatActual], v)} onRemove={(v) => removeFromList(["subcategorias", subcatActual], v)} />
               )}
+            </>
+          )}
             </>
           )}
         </div>
@@ -2028,6 +2293,303 @@ function SegurosTab({ seguros, toggleActiva, movimientos, userEmail }) {
   );
 }
 
+function AhorroTab({ ahorros, toggleActiva, movimientos, userEmail }) {
+  const activas = ahorros.filter((a) => a.activa);
+  const inactivas = ahorros.filter((a) => !a.activa);
+
+  function acumuladoDe(nombreAhorro) {
+    return movimientos
+      .filter((mv) => mv.mov === "Egreso" && mv.categoria === nombreAhorro)
+      .reduce((sum, mv) => sum + Number(mv.cantidad), 0);
+  }
+
+  function ultimoPagoDe(nombreAhorro) {
+    const pagos = movimientos.filter((mv) => mv.mov === "Egreso" && mv.categoria === nombreAhorro);
+    if (pagos.length === 0) return null;
+    return pagos.reduce((max, mv) => (mv.fecha > max ? mv.fecha : max), pagos[0].fecha);
+  }
+
+  function exportarCSV() {
+    const headers = ["Activa/Inactiva", "Nombre", "Categoría", "Descripción", "Método", "Meta", "Plazo (meses)", "Aportación", "Acumulado", "Pendiente", "Últ. Pago"];
+    const filas = ahorros.map((a) => {
+      const acumulado = acumuladoDe(a.nombre);
+      const ultPago = ultimoPagoDe(a.nombre);
+      return [a.activa ? "Activa" : "Inactiva", a.nombre, a.categoria || "", a.descripcion || "", a.metodo || "", a.meta, a.plazoMeses, a.aportacion, acumulado, Math.max(0, a.meta - acumulado), ultPago ? fmtDate(ultPago) : ""];
+    });
+    const totalMeta = ahorros.reduce((s, a) => s + a.meta, 0);
+    const totalAcumulado = ahorros.reduce((s, a) => s + acumuladoDe(a.nombre), 0);
+    const filaTotal = ["", "Total", "", "", "", totalMeta, "", "", totalAcumulado, Math.max(0, totalMeta - totalAcumulado), ""];
+    const escape = (v) => {
+      const str = String(v ?? "");
+      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const encabezado = [["Estado de cuenta de Ahorro"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a2 = document.createElement("a");
+    a2.href = url; a2.download = `Ahorro_${todayISO()}.csv`;
+    document.body.appendChild(a2); a2.click(); document.body.removeChild(a2);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const filas = ahorros.map((a) => {
+      const acumulado = acumuladoDe(a.nombre);
+      const ultPago = ultimoPagoDe(a.nombre);
+      return `<tr>
+        <td>${a.activa ? "Activa" : "Inactiva"}</td>
+        <td>${a.nombre}</td>
+        <td>${a.categoria || "-"}</td>
+        <td>${a.metodo || "-"}</td>
+        <td class="num">${fmt(a.meta)}</td>
+        <td class="num">${a.plazoMeses}</td>
+        <td class="num">${fmt(a.aportacion)}</td>
+        <td class="num">${fmt(acumulado)}</td>
+        <td class="num">${fmt(Math.max(0, a.meta - acumulado))}</td>
+        <td>${ultPago ? fmtDate(ultPago) : "-"}</td>
+      </tr>`;
+    }).join("");
+    const totalMeta = ahorros.reduce((s, a) => s + a.meta, 0);
+    const totalAcumulado = ahorros.reduce((s, a) => s + acumuladoDe(a.nombre), 0);
+    const filaTotal = `<tr class="total">
+        <td colspan="4">Total</td>
+        <td class="num">${fmt(totalMeta)}</td>
+        <td></td>
+        <td></td>
+        <td class="num">${fmt(totalAcumulado)}</td>
+        <td class="num">${fmt(Math.max(0, totalMeta - totalAcumulado))}</td>
+        <td></td>
+      </tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ahorro</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        tr.total td { font-weight: 700; background: #FFF2CC; }
+        @media print { body { padding: 0; } }
+      </style></head>
+      <body>
+        <h1>Estado de cuenta de Ahorro</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr>
+            <th>Estatus</th><th>Nombre</th><th>Categoría</th><th>Método</th>
+            <th class="num">Meta</th><th class="num">Plazo</th><th class="num">Aportación</th>
+            <th class="num">Acumulado</th><th class="num">Pendiente</th><th>Últ. Pago</th>
+          </tr></thead>
+          <tbody>${filas}${filaTotal}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
+
+  function Tarjeta({ a }) {
+    const acumulado = acumuladoDe(a.nombre);
+    const pendiente = Math.max(0, a.meta - acumulado);
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: a.activa ? "#fff" : SHEET.gris }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{a.nombre}</p>
+            {a.categoria && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{a.categoria}{a.descripcion ? ` · ${a.descripcion}` : ""}</p>}
+          </div>
+          <button onClick={() => toggleActiva(a.id)} style={{
+            fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+            border: "1px solid " + SHEET.grisBorde, background: a.activa ? SHEET.verde : "#fff", color: SHEET.texto, flexShrink: 0
+          }}>{a.activa ? "Activa" : "Inactiva"}</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Meta</span><br /><b>{fmt(a.meta)}</b></div>
+          <div><span style={{ color: "#777" }}>Acumulado</span><br /><b>{fmt(acumulado)}</b></div>
+          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b>{fmt(pendiente)}</b></div>
+        </div>
+        <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic" }}>
+          Aportación {fmt(a.aportacion)} · {a.plazoMeses} meses · {a.metodo}{a.cuenta ? ` · ${a.cuenta}` : ""}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+      </div>
+      <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
+        Para registrar una aportación, ve a Registro → Egreso → Tipo "Ahorro" → elige el ahorro.
+      </p>
+      <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activas</h3>
+      {activas.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes ahorros activos. Agrégalos desde Datos → Egresos → Tipo "Ahorro".</p>}
+      {activas.map((a) => <Tarjeta key={a.id} a={a} />)}
+
+      {inactivas.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "16px 0 10px" }}>Inactivas</h3>
+          {inactivas.map((a) => <Tarjeta key={a.id} a={a} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
+function InversionTab({ inversiones, toggleActiva, movimientos, userEmail }) {
+  const activas = inversiones.filter((i) => i.activa);
+  const inactivas = inversiones.filter((i) => !i.activa);
+
+  function acumuladoDe(nombreInversion) {
+    return movimientos
+      .filter((mv) => mv.mov === "Egreso" && mv.categoria === nombreInversion)
+      .reduce((sum, mv) => sum + Number(mv.cantidad), 0);
+  }
+
+  function ultimoPagoDe(nombreInversion) {
+    const pagos = movimientos.filter((mv) => mv.mov === "Egreso" && mv.categoria === nombreInversion);
+    if (pagos.length === 0) return null;
+    return pagos.reduce((max, mv) => (mv.fecha > max ? mv.fecha : max), pagos[0].fecha);
+  }
+
+  function exportarCSV() {
+    const headers = ["Activa/Inactiva", "Nombre", "Categoría", "Descripción", "Objetivo", "Método", "Meta", "Plazo (meses)", "Aportación", "Acumulado", "Pendiente", "Últ. Pago"];
+    const filas = inversiones.map((i) => {
+      const acumulado = acumuladoDe(i.nombre);
+      const ultPago = ultimoPagoDe(i.nombre);
+      return [i.activa ? "Activa" : "Inactiva", i.nombre, i.categoria || "", i.descripcion || "", i.objetivo || "", i.metodo || "", i.meta, i.plazoMeses, i.aportacion, acumulado, Math.max(0, i.meta - acumulado), ultPago ? fmtDate(ultPago) : ""];
+    });
+    const totalMeta = inversiones.reduce((s, i) => s + i.meta, 0);
+    const totalAcumulado = inversiones.reduce((s, i) => s + acumuladoDe(i.nombre), 0);
+    const filaTotal = ["", "Total", "", "", "", "", totalMeta, "", "", totalAcumulado, Math.max(0, totalMeta - totalAcumulado), ""];
+    const escape = (v) => {
+      const str = String(v ?? "");
+      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const encabezado = [["Estado de cuenta de Inversión"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Inversion_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const filas = inversiones.map((i) => {
+      const acumulado = acumuladoDe(i.nombre);
+      const ultPago = ultimoPagoDe(i.nombre);
+      return `<tr>
+        <td>${i.activa ? "Activa" : "Inactiva"}</td>
+        <td>${i.nombre}</td>
+        <td>${i.categoria || "-"}</td>
+        <td>${i.objetivo || "-"}</td>
+        <td>${i.metodo || "-"}</td>
+        <td class="num">${fmt(i.meta)}</td>
+        <td class="num">${i.plazoMeses}</td>
+        <td class="num">${fmt(i.aportacion)}</td>
+        <td class="num">${fmt(acumulado)}</td>
+        <td class="num">${fmt(Math.max(0, i.meta - acumulado))}</td>
+        <td>${ultPago ? fmtDate(ultPago) : "-"}</td>
+      </tr>`;
+    }).join("");
+    const totalMeta = inversiones.reduce((s, i) => s + i.meta, 0);
+    const totalAcumulado = inversiones.reduce((s, i) => s + acumuladoDe(i.nombre), 0);
+    const filaTotal = `<tr class="total">
+        <td colspan="5">Total</td>
+        <td class="num">${fmt(totalMeta)}</td>
+        <td></td>
+        <td></td>
+        <td class="num">${fmt(totalAcumulado)}</td>
+        <td class="num">${fmt(Math.max(0, totalMeta - totalAcumulado))}</td>
+        <td></td>
+      </tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Inversión</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        tr.total td { font-weight: 700; background: #FFF2CC; }
+        @media print { body { padding: 0; } }
+      </style></head>
+      <body>
+        <h1>Estado de cuenta de Inversión</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr>
+            <th>Estatus</th><th>Nombre</th><th>Categoría</th><th>Objetivo</th><th>Método</th>
+            <th class="num">Meta</th><th class="num">Plazo</th><th class="num">Aportación</th>
+            <th class="num">Acumulado</th><th class="num">Pendiente</th><th>Últ. Pago</th>
+          </tr></thead>
+          <tbody>${filas}${filaTotal}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
+
+  function Tarjeta({ i }) {
+    const acumulado = acumuladoDe(i.nombre);
+    const pendiente = Math.max(0, i.meta - acumulado);
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: i.activa ? "#fff" : SHEET.gris }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{i.nombre}</p>
+            {i.categoria && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{i.categoria}{i.objetivo ? ` · ${i.objetivo}` : ""}</p>}
+          </div>
+          <button onClick={() => toggleActiva(i.id)} style={{
+            fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+            border: "1px solid " + SHEET.grisBorde, background: i.activa ? SHEET.verde : "#fff", color: SHEET.texto, flexShrink: 0
+          }}>{i.activa ? "Activa" : "Inactiva"}</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Meta</span><br /><b>{fmt(i.meta)}</b></div>
+          <div><span style={{ color: "#777" }}>Acumulado</span><br /><b>{fmt(acumulado)}</b></div>
+          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b>{fmt(pendiente)}</b></div>
+        </div>
+        <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic" }}>
+          Aportación {fmt(i.aportacion)} · {i.plazoMeses} meses · {i.metodo}{i.cuenta ? ` · ${i.cuenta}` : ""}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+      </div>
+      <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
+        Para registrar una aportación, ve a Registro → Egreso → Tipo "Inversión" → elige la inversión.
+      </p>
+      <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activas</h3>
+      {activas.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes inversiones activas. Agrégalas desde Datos → Egresos → Tipo "Inversión".</p>}
+      {activas.map((i) => <Tarjeta key={i.id} i={i} />)}
+
+      {inactivas.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "16px 0 10px" }}>Inactivas</h3>
+          {inactivas.map((i) => <Tarjeta key={i.id} i={i} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -2170,6 +2732,24 @@ export default function App() {
     guardarCatalogoAhora(actualizado);
   }
 
+  function toggleActivaAhorroApp(id) {
+    const actualizado = {
+      ...catalogRef.current,
+      ahorros: (catalogRef.current.ahorros || []).map((a) => (a.id === id ? { ...a, activa: !a.activa } : a))
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
+  }
+
+  function toggleActivaInversionApp(id) {
+    const actualizado = {
+      ...catalogRef.current,
+      inversiones: (catalogRef.current.inversiones || []).map((i) => (i.id === id ? { ...i, activa: !i.activa } : i))
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
   }
@@ -2221,6 +2801,8 @@ export default function App() {
       {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "servicios" && <ServiciosTab servicios={catalog.servicios || []} toggleActiva={toggleActivaServicioApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "seguros" && <SegurosTab seguros={catalog.seguros || []} toggleActiva={toggleActivaSeguroApp} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "ahorro" && <AhorroTab ahorros={catalog.ahorros || []} toggleActiva={toggleActivaAhorroApp} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "inversion" && <InversionTab inversiones={catalog.inversiones || []} toggleActiva={toggleActivaInversionApp} movimientos={movimientos} userEmail={session.user.email} />}
     </div>
   );
 }
