@@ -25,11 +25,12 @@ const DEFAULT_CATALOG = {
     TDD: []
   },
   lugares: [],
-  tipos: ["G. Fijo", "G. Variable", "Préstamo", "Inversión", "Ahorro", "Otro(a)", "Pago TDC"],
+  tipos: ["G. Fijo", "G. Variable", "Préstamo", "Familia", "Inversión", "Ahorro", "Otro(a)", "Pago TDC"],
   categorias: {
-    "G. Fijo": ["Seguros", "Membresías", "Servicios", "Familia"],
+    "G. Fijo": ["Seguros", "Membresías", "Servicios"],
     "G. Variable": ["Comidas", "Compras Online", "Educación", "Entretenimiento", "Gastos Personales", "Intereses TDC", "Mascotas", "Otro(a)", "Regalos y Festejos", "Ropa y Accesorios", "Salud y Bienestar", "Supermercado", "Tecnología", "Tienda de Conveniencia", "Transporte", "Viajes y Vacaciones", "Vivienda"],
     "Préstamo": ["Bancario", "Crédito", "de Tercero", "a Tercero"],
+    "Familia": ["Aportación", "Pago TDC Familiar"],
     "Inversión": [],
     "Ahorro": ["Viaje", "Tecnología", "Entretenimiento", "Transporte", "Casa/Hogar"],
     "Otro(a)": ["Otro(a)"],
@@ -39,7 +40,8 @@ const DEFAULT_CATALOG = {
     "Seguros": [],
     "Membresías": [],
     "Servicios": [],
-    "Familia": [],
+    "Aportación": [],
+    "Pago TDC Familiar": [],
     "Comidas": ["Domicilio", "Restaurante", "Otro(a)"],
     "Compras Online": ["Amazon", "Mercado Libre", "Ebay", "Otro(a)"],
     "Educación": ["Colegiatura", "Utiles", "Otro(a)"],
@@ -79,7 +81,8 @@ const DEFAULT_CATALOG = {
   membresias: [],
   seguros: [],
   servicios: [],
-  prestamos: [],
+  prestamosBancarios: [],
+  prestamosTerceros: [],
   familiares: [],
   diferidos: [],
   ahorros: [],
@@ -247,6 +250,8 @@ function TabBar({ tab, setTab, onLogout }) {
     { id: "membresias", label: "Membresías" },
     { id: "servicios", label: "Servicios" },
     { id: "seguros", label: "Seguros" },
+    { id: "prestamos", label: "Préstamos" },
+    { id: "familia", label: "Familia" },
     { id: "ahorro", label: "Ahorro" },
     { id: "inversion", label: "Inversión" },
     { id: "catalogos", label: "Datos" }
@@ -313,6 +318,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [subcategoria, setSubcategoria] = useState("");
   const [ingresoTipo, setIngresoTipo] = useState("");
   const [ingresoSub, setIngresoSub] = useState("");
+  const [ingresoPersonaTercero, setIngresoPersonaTercero] = useState("");
   const [descripcion, setDescripcion] = useState("");
   const [lugar, setLugar] = useState("");
   const [fecha, setFecha] = useState(todayISO());
@@ -334,13 +340,14 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   useEffect(() => { setCategoria(""); }, [tipo]);
   useEffect(() => { setSubcategoria(""); }, [categoria]);
   useEffect(() => { setIngresoSub(""); }, [ingresoTipo]);
+  useEffect(() => { setIngresoPersonaTercero(""); }, [ingresoSub]);
   useEffect(() => { if (metodo !== "TDC") setEsDiferido(false); }, [metodo]);
   useEffect(() => { if (mov !== "Egreso") setEsDiferido(false); }, [mov]);
   useEffect(() => { setPagosPrevios(""); setPagadoPrevio(""); }, [plazoMeses]);
 
   function reset() {
     setMetodo(""); setCuenta(""); setTipo(""); setCategoria(""); setSubcategoria("");
-    setIngresoTipo(""); setIngresoSub(""); setDescripcion(""); setLugar(""); setCantidad("");
+    setIngresoTipo(""); setIngresoSub(""); setIngresoPersonaTercero(""); setDescripcion(""); setLugar(""); setCantidad("");
     setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses(""); setNombreDiferido("");
     setPagosPrevios(""); setPagadoPrevio("");
   }
@@ -361,6 +368,8 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
     } else {
       if (!ingresoTipo) errs.ingresoTipo = true;
       if (ingresoSubsDisponibles.length > 0 && !ingresoSub) errs.ingresoSub = true;
+      if (ingresoTipo === "Préstamo" && (ingresoSub === "de Tercero" || ingresoSub === "a Tercero") &&
+        (catalog.subcategorias[ingresoSub] || []).length > 0 && !ingresoPersonaTercero) errs.ingresoPersonaTercero = true;
     }
     return errs;
   }
@@ -382,7 +391,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
         mov, metodo, cuenta,
         tipo: mov === "Egreso" ? tipo : ingresoTipo,
         categoria: mov === "Egreso" ? categoria : ingresoSub,
-        subcategoria: mov === "Egreso" ? subcategoria : "",
+        subcategoria: mov === "Egreso" ? subcategoria : (ingresoPersonaTercero || ""),
         descripcion, lugar, fecha, cantidad: amt
       };
       await addMovimiento(entry);
@@ -530,6 +539,11 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                     Te puse la aportación registrada en Cantidad — puedes ajustarla si metiste distinto.
                   </p>
                 )}
+                {tipo === "Préstamo" && (categoria === "de Tercero" || categoria === "a Tercero") && (
+                  <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                    {categoria === "a Tercero" ? "Egreso = le prestaste más dinero a esta persona." : "Egreso = le abonaste / pagaste lo que le debías."}
+                  </p>
+                )}
               </Field>
               {categoria && subcatsDisponibles.length > 0 && (
                 <Field label="Subcategoría" error={errors.subcategoria}>
@@ -546,6 +560,9 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                     } else if (categoria === "Seguros") {
                       const seg = (catalog.seguros || []).find((s) => s.nombre === v);
                       if (seg) setCantidad(String(seg.costo));
+                    } else if (categoria === "Bancario" || categoria === "Crédito") {
+                      const prb = (catalog.prestamosBancarios || []).find((p) => p.nombre === v);
+                      if (prb) setCantidad(String(prb.aportacion));
                     }
                   }} style={selStyle(errors.subcategoria)}>
                     <option value="">Selecciona...</option>
@@ -553,7 +570,8 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                   </select>
                   {((categoria === "Membresías" && (catalog.membresias || []).some((m) => m.nombre === subcategoria)) ||
                     (categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria && !s.esVariable)) ||
-                    (categoria === "Seguros" && (catalog.seguros || []).some((s) => s.nombre === subcategoria))) && subcategoria && (
+                    (categoria === "Seguros" && (catalog.seguros || []).some((s) => s.nombre === subcategoria)) ||
+                    ((categoria === "Bancario" || categoria === "Crédito") && (catalog.prestamosBancarios || []).some((p) => p.nombre === subcategoria))) && subcategoria && (
                     <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
                       Te puse el costo registrado en Cantidad — puedes ajustarlo si pagaste distinto.
                     </p>
@@ -579,6 +597,19 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                   <select value={ingresoSub} onChange={(e) => { setIngresoSub(e.target.value); setErrors((p) => ({ ...p, ingresoSub: false })); }} style={selStyle(errors.ingresoSub)}>
                     <option value="">Selecciona...</option>
                     {ingresoSubsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  {ingresoTipo === "Préstamo" && (ingresoSub === "de Tercero" || ingresoSub === "a Tercero") && (
+                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                      {ingresoSub === "de Tercero" ? "Ingreso = te prestaron más dinero." : "Ingreso = te abonaron / pagaron lo que te debían."}
+                    </p>
+                  )}
+                </Field>
+              )}
+              {ingresoTipo === "Préstamo" && (ingresoSub === "de Tercero" || ingresoSub === "a Tercero") && (catalog.subcategorias[ingresoSub] || []).length > 0 && (
+                <Field label="Persona" error={errors.ingresoPersonaTercero}>
+                  <select value={ingresoPersonaTercero} onChange={(e) => { setIngresoPersonaTercero(e.target.value); setErrors((p) => ({ ...p, ingresoPersonaTercero: false })); }} style={selStyle(errors.ingresoPersonaTercero)}>
+                    <option value="">Selecciona...</option>
+                    {(catalog.subcategorias[ingresoSub] || []).map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </Field>
               )}
@@ -903,6 +934,22 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [invPlazo, setInvPlazo] = useState("");
   const [invAportacion, setInvAportacion] = useState("");
   const [editandoInvId, setEditandoInvId] = useState(null);
+  const [prbVista, setPrbVista] = useState("bancario");
+  const [prbNombre, setPrbNombre] = useState("");
+  const [prbCategoria, setPrbCategoria] = useState("Bancario");
+  const [prbMetodo, setPrbMetodo] = useState(catalog.metodos[0] || "Efectivo");
+  const [prbCuenta, setPrbCuenta] = useState("");
+  const [prbMonto, setPrbMonto] = useState("");
+  const [prbPlazo, setPrbPlazo] = useState("");
+  const [prbAportacion, setPrbAportacion] = useState("");
+  const [editandoPrbId, setEditandoPrbId] = useState(null);
+  const [prtNombre, setPrtNombre] = useState("");
+  const [prtDireccion, setPrtDireccion] = useState("a Tercero");
+  const [prtNota, setPrtNota] = useState("");
+  const [editandoPrtId, setEditandoPrtId] = useState(null);
+  const [famNombre, setFamNombre] = useState("");
+  const [famParentesco, setFamParentesco] = useState("");
+  const [editandoFamId, setEditandoFamId] = useState(null);
 
   function limpiarFormMembresia() {
     setMemNombre(""); setMemCategoria(""); setMemMetodo(catalog.metodos[0] || "TDC"); setMemCuenta("");
@@ -1130,13 +1177,134 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
     guardarAhora(actualizado);
   }
 
+  function limpiarFormPrestamoBancario() {
+    setPrbNombre(""); setPrbCategoria("Bancario"); setPrbMetodo(catalog.metodos[0] || "Efectivo"); setPrbCuenta("");
+    setPrbMonto(""); setPrbPlazo(""); setPrbAportacion(""); setEditandoPrbId(null);
+  }
+
+  function guardarPrestamoBancario() {
+    if (!prbNombre || !prbMonto || parseFloat(prbMonto) <= 0) return;
+    const existente = (catalog.prestamosBancarios || []).find((p) => p.id === editandoPrbId);
+    const pb = {
+      id: editandoPrbId || uid(), activa: true, nombre: prbNombre, categoria: prbCategoria,
+      metodo: prbMetodo, cuenta: prbCuenta, montoPrestamo: parseFloat(prbMonto), plazoMeses: parseInt(prbPlazo) || 0,
+      aportacion: parseFloat(prbAportacion) || 0, acumulado: existente ? existente.acumulado : 0, ultimoPago: existente ? existente.ultimoPago : ""
+    };
+    const lista = catalog.prestamosBancarios || [];
+    const yaExiste = lista.some((p) => p.id === pb.id);
+    const nuevosPrestamos = yaExiste ? lista.map((p) => (p.id === pb.id ? { ...p, ...pb } : p)) : [pb, ...lista];
+    const subcatsActuales = catalog.subcategorias[prbCategoria] || [];
+    const nuevasSubcats = subcatsActuales.includes(prbNombre) ? subcatsActuales : [...subcatsActuales, prbNombre];
+    const actualizado = {
+      ...catalog,
+      prestamosBancarios: nuevosPrestamos,
+      subcategorias: { ...catalog.subcategorias, [prbCategoria]: nuevasSubcats }
+    };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+    limpiarFormPrestamoBancario();
+  }
+
+  function editarPrestamoBancario(p) {
+    setEditandoPrbId(p.id); setPrbNombre(p.nombre); setPrbCategoria(p.categoria); setPrbMetodo(p.metodo);
+    setPrbCuenta(p.cuenta); setPrbMonto(String(p.montoPrestamo)); setPrbPlazo(String(p.plazoMeses)); setPrbAportacion(String(p.aportacion));
+  }
+
+  function toggleActivaPrestamoBancario(id) {
+    const actualizado = { ...catalog, prestamosBancarios: (catalog.prestamosBancarios || []).map((p) => (p.id === id ? { ...p, activa: !p.activa } : p)) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function eliminarPrestamoBancario(id) {
+    const actualizado = { ...catalog, prestamosBancarios: (catalog.prestamosBancarios || []).filter((p) => p.id !== id) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function limpiarFormPrestamoTercero() {
+    setPrtNombre(""); setPrtDireccion("a Tercero"); setPrtNota(""); setEditandoPrtId(null);
+  }
+
+  function guardarPrestamoTercero() {
+    if (!prtNombre) return;
+    const pt = {
+      id: editandoPrtId || uid(), activa: true, nombre: prtNombre, direccion: prtDireccion, nota: prtNota
+    };
+    const lista = catalog.prestamosTerceros || [];
+    const yaExiste = lista.some((p) => p.id === pt.id);
+    const nuevosPrestamos = yaExiste ? lista.map((p) => (p.id === pt.id ? { ...p, ...pt } : p)) : [pt, ...lista];
+    const subcatsActuales = catalog.subcategorias[prtDireccion] || [];
+    const nuevasSubcats = subcatsActuales.includes(prtNombre) ? subcatsActuales : [...subcatsActuales, prtNombre];
+    const actualizado = {
+      ...catalog,
+      prestamosTerceros: nuevosPrestamos,
+      subcategorias: { ...catalog.subcategorias, [prtDireccion]: nuevasSubcats }
+    };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+    limpiarFormPrestamoTercero();
+  }
+
+  function editarPrestamoTercero(p) {
+    setEditandoPrtId(p.id); setPrtNombre(p.nombre); setPrtDireccion(p.direccion); setPrtNota(p.nota || "");
+  }
+
+  function toggleActivaPrestamoTercero(id) {
+    const actualizado = { ...catalog, prestamosTerceros: (catalog.prestamosTerceros || []).map((p) => (p.id === id ? { ...p, activa: !p.activa } : p)) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function eliminarPrestamoTercero(id) {
+    const actualizado = { ...catalog, prestamosTerceros: (catalog.prestamosTerceros || []).filter((p) => p.id !== id) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function limpiarFormFamiliar() {
+    setFamNombre(""); setFamParentesco(""); setEditandoFamId(null);
+  }
+
+  function guardarFamiliar() {
+    if (!famNombre) return;
+    const fam = { id: editandoFamId || uid(), nombre: famNombre, parentesco: famParentesco };
+    const lista = catalog.familiares || [];
+    const yaExiste = lista.some((f) => f.id === fam.id);
+    const nuevosFamiliares = yaExiste ? lista.map((f) => (f.id === fam.id ? { ...f, ...fam } : f)) : [fam, ...lista];
+    const subcatsAportacion = catalog.subcategorias["Aportación"] || [];
+    const nuevasSubcatsAportacion = subcatsAportacion.includes(famNombre) ? subcatsAportacion : [...subcatsAportacion, famNombre];
+    const subcatsPagoTDC = catalog.subcategorias["Pago TDC Familiar"] || [];
+    const nuevasSubcatsPagoTDC = subcatsPagoTDC.includes(famNombre) ? subcatsPagoTDC : [...subcatsPagoTDC, famNombre];
+    const actualizado = {
+      ...catalog,
+      familiares: nuevosFamiliares,
+      subcategorias: { ...catalog.subcategorias, "Aportación": nuevasSubcatsAportacion, "Pago TDC Familiar": nuevasSubcatsPagoTDC }
+    };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+    limpiarFormFamiliar();
+  }
+
+  function editarFamiliar(f) {
+    setEditandoFamId(f.id); setFamNombre(f.nombre); setFamParentesco(f.parentesco || "");
+  }
+
+  function eliminarFamiliar(id) {
+    const fam = (catalog.familiares || []).find((f) => f.id === id);
+    const actualizado = { ...catalog, familiares: (catalog.familiares || []).filter((f) => f.id !== id) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
   const cuentasMemDisponibles = catalog.cuentas[memMetodo] || [];
   const cuentasServDisponibles = catalog.cuentas[servMetodo] || [];
   const cuentasSegDisponibles = catalog.cuentas[segMetodo] || [];
+  const cuentasPrbDisponibles = catalog.cuentas[prbMetodo] || [];
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
     { id: "ingresos", label: "Ingresos" },
-    { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" }, { id: "familiares", label: "Familia" }
+    { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" }
   ];
   const categoriasDelTipo = catalog.categorias[newCatTipo] || [];
   const subcatActual = newSubcatCategoria && categoriasDelTipo.includes(newSubcatCategoria) ? newSubcatCategoria : (categoriasDelTipo[0] || "");
@@ -1298,6 +1466,180 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                     }}>{i.activa ? "Activa" : "Inactiva"}</button>
                     <button onClick={() => editarInversion(i)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
                     <button onClick={() => eliminarInversion(i.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : newCatTipo === "Préstamo" ? (
+            <div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                <button onClick={() => setPrbVista("bancario")} style={{
+                  flex: 1, padding: "7px 0", fontSize: 12.5, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                  border: prbVista === "bancario" ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                  background: prbVista === "bancario" ? SHEET.azul : "#fff"
+                }}>Debo (Bancario/Crédito)</button>
+                <button onClick={() => setPrbVista("terceros")} style={{
+                  flex: 1, padding: "7px 0", fontSize: 12.5, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                  border: prbVista === "terceros" ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                  background: prbVista === "terceros" ? SHEET.azul : "#fff"
+                }}>De/A Terceros</button>
+              </div>
+
+              {prbVista === "bancario" ? (
+                <div>
+                  <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+                      {editandoPrbId ? "Editar préstamo" : "Agregar préstamo"}
+                    </p>
+                    <Field label="Nombre">
+                      <input type="text" value={prbNombre} onChange={(e) => setPrbNombre(e.target.value)} style={inputBase} placeholder="Ej. Crédito auto BBVA" />
+                    </Field>
+                    <Field label="Categoría">
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {["Bancario", "Crédito"].map((c) => (
+                          <button key={c} onClick={() => setPrbCategoria(c)} style={{
+                            flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                            border: prbCategoria === c ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                            background: prbCategoria === c ? SHEET.azul : "#fff"
+                          }}>{c}</button>
+                        ))}
+                      </div>
+                    </Field>
+                    <Field label="Método de pago">
+                      <select value={prbMetodo} onChange={(e) => { setPrbMetodo(e.target.value); setPrbCuenta(""); }} style={inputBase}>
+                        {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </Field>
+                    {cuentasPrbDisponibles.length > 0 && (
+                      <Field label="Cuenta / tarjeta">
+                        <select value={prbCuenta} onChange={(e) => setPrbCuenta(e.target.value)} style={inputBase}>
+                          <option value="">Selecciona...</option>
+                          {cuentasPrbDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </Field>
+                    )}
+                    <Field label="Monto del préstamo (lo que te prestaron)">
+                      <input type="number" inputMode="decimal" value={prbMonto} onChange={(e) => setPrbMonto(e.target.value)} style={inputBase} placeholder="$0.00" />
+                    </Field>
+                    <Field label="Plazo (meses)">
+                      <input type="number" inputMode="numeric" value={prbPlazo} onChange={(e) => setPrbPlazo(e.target.value)} style={inputBase} placeholder="Ej. 24" />
+                    </Field>
+                    <Field label="Aportación (pago mensual)">
+                      <input type="number" inputMode="decimal" value={prbAportacion} onChange={(e) => setPrbAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
+                    </Field>
+                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
+                      Se marca como liquidado automáticamente cuando lo pagado alcance el monto del préstamo.
+                    </p>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      <Btn primary full onClick={guardarPrestamoBancario}>{editandoPrbId ? "Guardar cambios" : "Agregar préstamo"}</Btn>
+                      {editandoPrbId && <Btn full onClick={limpiarFormPrestamoBancario}>Cancelar</Btn>}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus préstamos</p>
+                  {(catalog.prestamosBancarios || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin préstamos aún.</p>}
+                  {(catalog.prestamosBancarios || []).map((p) => (
+                    <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: p.activa ? "#fff" : SHEET.gris }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{p.nombre} <span style={{ fontWeight: 400, fontSize: 11, color: "#777" }}>({p.categoria})</span></p>
+                        <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                          {fmt(p.acumulado)} de {fmt(p.montoPrestamo)} · Aportación {fmt(p.aportacion)} · {p.plazoMeses} meses
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                        <button onClick={() => toggleActivaPrestamoBancario(p.id)} style={{
+                          fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                          border: "1px solid " + SHEET.grisBorde, background: p.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                        }}>{p.activa ? "Activo" : "Liquidado"}</button>
+                        <button onClick={() => editarPrestamoBancario(p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                        <button onClick={() => eliminarPrestamoBancario(p.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div>
+                  <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+                      {editandoPrtId ? "Editar persona" : "Agregar persona"}
+                    </p>
+                    <Field label="Nombre de la persona">
+                      <input type="text" value={prtNombre} onChange={(e) => setPrtNombre(e.target.value)} style={inputBase} placeholder="Ej. Mi hermano, Lupita" />
+                    </Field>
+                    <Field label="¿Quién debe?">
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => setPrtDireccion("a Tercero")} style={{
+                          flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                          border: prtDireccion === "a Tercero" ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                          background: prtDireccion === "a Tercero" ? SHEET.azul : "#fff"
+                        }}>Me debe a mí</button>
+                        <button onClick={() => setPrtDireccion("de Tercero")} style={{
+                          flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                          border: prtDireccion === "de Tercero" ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                          background: prtDireccion === "de Tercero" ? SHEET.azul : "#fff"
+                        }}>Yo le debo</button>
+                      </div>
+                    </Field>
+                    <Field label="Nota (opcional)">
+                      <input type="text" value={prtNota} onChange={(e) => setPrtNota(e.target.value)} style={inputBase} placeholder="Ej. Para el coche" />
+                    </Field>
+                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
+                      No hay monto fijo — puedes registrar varios préstamos o abonos sueltos a la misma persona y el saldo se calcula solo.
+                    </p>
+                    <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                      <Btn primary full onClick={guardarPrestamoTercero}>{editandoPrtId ? "Guardar cambios" : "Agregar persona"}</Btn>
+                      {editandoPrtId && <Btn full onClick={limpiarFormPrestamoTercero}>Cancelar</Btn>}
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Personas registradas</p>
+                  {(catalog.prestamosTerceros || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin personas aún.</p>}
+                  {(catalog.prestamosTerceros || []).map((p) => (
+                    <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: "#fff" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{p.nombre}</p>
+                        <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                          {p.direccion === "a Tercero" ? "Me debe a mí" : "Yo le debo"}{p.nota ? ` · ${p.nota}` : ""}
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                        <button onClick={() => editarPrestamoTercero(p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                        <button onClick={() => eliminarPrestamoTercero(p.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : newCatTipo === "Familia" ? (
+            <div>
+              <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+                <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>
+                  {editandoFamId ? "Editar familiar" : "Agregar familiar"}
+                </p>
+                <Field label="Nombre">
+                  <input type="text" value={famNombre} onChange={(e) => setFamNombre(e.target.value)} style={inputBase} placeholder="Ej. Mamá, Papá" />
+                </Field>
+                <Field label="Parentesco">
+                  <input type="text" value={famParentesco} onChange={(e) => setFamParentesco(e.target.value)} style={inputBase} placeholder="Ej. Madre, Padre, Hermano" />
+                </Field>
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <Btn primary full onClick={guardarFamiliar}>{editandoFamId ? "Guardar cambios" : "Agregar familiar"}</Btn>
+                  {editandoFamId && <Btn full onClick={limpiarFormFamiliar}>Cancelar</Btn>}
+                </div>
+              </div>
+
+              <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus familiares</p>
+              {(catalog.familiares || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin familiares aún.</p>}
+              {(catalog.familiares || []).map((f) => (
+                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: "#fff" }}>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{f.nombre}</p>
+                    {f.parentesco && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{f.parentesco}</p>}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                    <button onClick={() => editarFamiliar(f)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                    <button onClick={() => eliminarFamiliar(f.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
                   </div>
                 </div>
               ))}
@@ -1612,7 +1954,6 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
       )}
       {section === "lugares" && <ListEditor title="Lugares frecuentes" items={catalog.lugares} onAdd={(v) => addToList(["lugares"], v)} onRemove={(v) => removeFromList(["lugares"], v)} />}
 
-      {section === "familiares" && <ListEditor title="Familiares" items={catalog.familiares} onAdd={(v) => addToList(["familiares"], v)} onRemove={(v) => removeFromList(["familiares"], v)} />}
       {section === "presupuestos" && (
         <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
           <HeaderBand color={SHEET.rosa} borderColor={SHEET.rosaBorde}>Presupuesto mensual por categoría</HeaderBand>
@@ -2293,6 +2634,268 @@ function SegurosTab({ seguros, toggleActiva, movimientos, userEmail }) {
   );
 }
 
+function PrestamosTab({ prestamosBancarios, prestamosTerceros, toggleActivaBancario, movimientos, userEmail }) {
+  const [vista, setVista] = useState("debo");
+  const mesesLabel = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+  function saldoTerceroDe(nombre, direccion) {
+    const prestado = movimientos
+      .filter((mv) => mv.subcategoria === nombre && mv.categoria === direccion && mv.tipo === "Préstamo" &&
+        ((direccion === "a Tercero" && mv.mov === "Egreso") || (direccion === "de Tercero" && mv.mov === "Ingreso")))
+      .reduce((sum, mv) => sum + Number(mv.cantidad), 0);
+    const abonado = movimientos
+      .filter((mv) => mv.subcategoria === nombre && mv.categoria === direccion && mv.tipo === "Préstamo" &&
+        ((direccion === "a Tercero" && mv.mov === "Ingreso") || (direccion === "de Tercero" && mv.mov === "Egreso")))
+      .reduce((sum, mv) => sum + Number(mv.cantidad), 0);
+    return { prestado, abonado, saldo: prestado - abonado };
+  }
+
+  const bancariosActivos = prestamosBancarios.filter((p) => p.activa);
+  const bancariosLiquidados = prestamosBancarios.filter((p) => !p.activa);
+  const tercerosMeDeben = prestamosTerceros.filter((p) => p.direccion === "a Tercero");
+  const tercerosYoDebo = prestamosTerceros.filter((p) => p.direccion === "de Tercero");
+
+  function exportarCSVBancarios() {
+    const headers = ["Activo/Liquidado", "Nombre", "Categoría", "Método", "Monto préstamo", "Plazo (meses)", "Aportación", "Acumulado", "Pendiente", "Últ. Pago"];
+    const filas = prestamosBancarios.map((p) => {
+      const acumulado = p.acumulado || 0;
+      const ultPago = p.ultimoPago;
+      return [p.activa ? "Activo" : "Liquidado", p.nombre, p.categoria, p.metodo || "", p.montoPrestamo, p.plazoMeses, p.aportacion, acumulado, Math.max(0, p.montoPrestamo - acumulado), ultPago ? fmtDate(ultPago) : ""];
+    });
+    const totalMonto = prestamosBancarios.reduce((s, p) => s + p.montoPrestamo, 0);
+    const totalAcumulado = prestamosBancarios.reduce((s, p) => s + (p.acumulado || 0), 0);
+    const filaTotal = ["", "Total", "", "", totalMonto, "", "", totalAcumulado, Math.max(0, totalMonto - totalAcumulado), ""];
+    const escape = (v) => {
+      const str = String(v ?? "");
+      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const encabezado = [["Estado de cuenta de Préstamos Bancario/Crédito"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Prestamos_Bancarios_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDFBancarios() {
+    const filas = prestamosBancarios.map((p) => {
+      const acumulado = p.acumulado || 0;
+      const ultPago = p.ultimoPago;
+      return `<tr>
+        <td>${p.activa ? "Activo" : "Liquidado"}</td>
+        <td>${p.nombre}</td>
+        <td>${p.categoria}</td>
+        <td>${p.metodo || "-"}</td>
+        <td class="num">${fmt(p.montoPrestamo)}</td>
+        <td class="num">${p.plazoMeses}</td>
+        <td class="num">${fmt(p.aportacion)}</td>
+        <td class="num">${fmt(acumulado)}</td>
+        <td class="num">${fmt(Math.max(0, p.montoPrestamo - acumulado))}</td>
+        <td>${ultPago ? fmtDate(ultPago) : "-"}</td>
+      </tr>`;
+    }).join("");
+    const totalMonto = prestamosBancarios.reduce((s, p) => s + p.montoPrestamo, 0);
+    const totalAcumulado = prestamosBancarios.reduce((s, p) => s + (p.acumulado || 0), 0);
+    const filaTotal = `<tr class="total">
+        <td colspan="4">Total</td>
+        <td class="num">${fmt(totalMonto)}</td>
+        <td></td><td></td>
+        <td class="num">${fmt(totalAcumulado)}</td>
+        <td class="num">${fmt(Math.max(0, totalMonto - totalAcumulado))}</td>
+        <td></td>
+      </tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Préstamos Bancario/Crédito</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        tr.total td { font-weight: 700; background: #FFF2CC; }
+        @media print { body { padding: 0; } }
+      </style></head>
+      <body>
+        <h1>Estado de cuenta de Préstamos Bancario/Crédito</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr>
+            <th>Estatus</th><th>Nombre</th><th>Categoría</th><th>Método</th>
+            <th class="num">Monto</th><th class="num">Plazo</th><th class="num">Aportación</th>
+            <th class="num">Acumulado</th><th class="num">Pendiente</th><th>Últ. Pago</th>
+          </tr></thead>
+          <tbody>${filas}${filaTotal}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
+
+  function exportarCSVTerceros() {
+    const headers = ["Persona", "Quién debe", "Nota", "Prestado", "Abonado", "Saldo pendiente"];
+    const filas = prestamosTerceros.map((p) => {
+      const { prestado, abonado, saldo } = saldoTerceroDe(p.nombre, p.direccion);
+      return [p.nombre, p.direccion === "a Tercero" ? "Me debe a mí" : "Yo le debo", p.nota || "", prestado, abonado, saldo];
+    });
+    const escape = (v) => {
+      const str = String(v ?? "");
+      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const encabezado = [["Estado de cuenta de Préstamos de/a Terceros"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Prestamos_Terceros_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDFTerceros() {
+    const filas = prestamosTerceros.map((p) => {
+      const { prestado, abonado, saldo } = saldoTerceroDe(p.nombre, p.direccion);
+      return `<tr>
+        <td>${p.nombre}</td>
+        <td>${p.direccion === "a Tercero" ? "Me debe a mí" : "Yo le debo"}</td>
+        <td>${p.nota || "-"}</td>
+        <td class="num">${fmt(prestado)}</td>
+        <td class="num">${fmt(abonado)}</td>
+        <td class="num">${fmt(saldo)}</td>
+      </tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Préstamos de/a Terceros</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        @media print { body { padding: 0; } }
+      </style></head>
+      <body>
+        <h1>Estado de cuenta de Préstamos de/a Terceros</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr><th>Persona</th><th>Quién debe</th><th>Nota</th><th class="num">Prestado</th><th class="num">Abonado</th><th class="num">Saldo</th></tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
+
+  function TarjetaBancario({ p }) {
+    const acumulado = p.acumulado || 0;
+    const pendiente = Math.max(0, p.montoPrestamo - acumulado);
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: p.activa ? "#fff" : SHEET.gris }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{p.nombre}</p>
+            <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{p.categoria}</p>
+          </div>
+          <span style={{
+            fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, fontFamily: SHEET.fuente,
+            border: "1px solid " + SHEET.grisBorde, background: p.activa ? SHEET.verde : SHEET.amarillo, color: SHEET.texto, flexShrink: 0
+          }}>{p.activa ? "Activo" : "Liquidado"}</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Monto</span><br /><b>{fmt(p.montoPrestamo)}</b></div>
+          <div><span style={{ color: "#777" }}>Pagado</span><br /><b>{fmt(acumulado)}</b></div>
+          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b>{fmt(pendiente)}</b></div>
+        </div>
+        <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic" }}>
+          Aportación {fmt(p.aportacion)} · {p.plazoMeses} meses · {p.metodo}{p.cuenta ? ` · ${p.cuenta}` : ""}
+        </p>
+      </div>
+    );
+  }
+
+  function TarjetaTercero({ p }) {
+    const { prestado, abonado, saldo } = saldoTerceroDe(p.nombre, p.direccion);
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: "#fff" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{p.nombre}</p>
+            {p.nota && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{p.nota}</p>}
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Prestado</span><br /><b>{fmt(prestado)}</b></div>
+          <div><span style={{ color: "#777" }}>Abonado</span><br /><b>{fmt(abonado)}</b></div>
+          <div><span style={{ color: "#777" }}>Saldo</span><br /><b>{fmt(saldo)}</b></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <button onClick={() => setVista("debo")} style={{
+          flex: 1, padding: "8px 0", fontSize: 13, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+          border: vista === "debo" ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+          background: vista === "debo" ? SHEET.azul : "#fff"
+        }}>Debo</button>
+        <button onClick={() => setVista("meDeben")} style={{
+          flex: 1, padding: "8px 0", fontSize: 13, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+          border: vista === "meDeben" ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+          background: vista === "meDeben" ? SHEET.azul : "#fff"
+        }}>Me deben</button>
+      </div>
+
+      {vista === "debo" ? (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <Btn full onClick={exportarPDFBancarios} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+            <Btn full onClick={exportarCSVBancarios} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+          </div>
+          <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
+            Para registrar un pago, ve a Registro → Egreso → Tipo "Préstamo" → Bancario o Crédito → elige el préstamo.
+          </p>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Bancario / Crédito</h3>
+          {bancariosActivos.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes préstamos activos. Agrégalos desde Datos → Egresos → Tipo "Préstamo".</p>}
+          {bancariosActivos.map((p) => <TarjetaBancario key={p.id} p={p} />)}
+
+          {bancariosLiquidados.length > 0 && (
+            <>
+              <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "16px 0 10px" }}>Liquidados</h3>
+              {bancariosLiquidados.map((p) => <TarjetaBancario key={p.id} p={p} />)}
+            </>
+          )}
+
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "20px 0 10px" }}>Yo le debo a un tercero</h3>
+          {tercerosYoDebo.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes deudas con terceros registradas.</p>}
+          {tercerosYoDebo.map((p) => <TarjetaTercero key={p.id} p={p} />)}
+        </>
+      ) : (
+        <>
+          <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+            <Btn full onClick={exportarPDFTerceros} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+            <Btn full onClick={exportarCSVTerceros} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+          </div>
+          <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
+            Para registrar un préstamo o abono, ve a Registro → Egreso o Ingreso → Tipo "Préstamo" → a Tercero / de Tercero → elige la persona.
+          </p>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Me deben a mí</h3>
+          {tercerosMeDeben.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Nadie te debe dinero registrado. Agrégalos desde Datos → Egresos → Tipo "Préstamo" → De/A Terceros.</p>}
+          {tercerosMeDeben.map((p) => <TarjetaTercero key={p.id} p={p} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
 function AhorroTab({ ahorros, toggleActiva, movimientos, userEmail }) {
   const activas = ahorros.filter((a) => a.activa);
   const inactivas = ahorros.filter((a) => !a.activa);
@@ -2590,6 +3193,144 @@ function InversionTab({ inversiones, toggleActiva, movimientos, userEmail }) {
   );
 }
 
+function FamiliaTab({ familiares, movimientos, userEmail }) {
+  const mesesLabel = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+  function aportacionPorMes(nombreFamiliar) {
+    const totales = new Array(12).fill(0);
+    movimientos.forEach((mv) => {
+      if (mv.mov === "Egreso" && mv.categoria === "Aportación" && mv.subcategoria === nombreFamiliar) {
+        const mesIdx = parseInt(mv.fecha.slice(5, 7), 10) - 1;
+        if (mesIdx >= 0 && mesIdx < 12) totales[mesIdx] += Number(mv.cantidad);
+      }
+    });
+    return totales;
+  }
+
+  function pagoTDCPorMes(nombreFamiliar) {
+    const totales = new Array(12).fill(0);
+    movimientos.forEach((mv) => {
+      if (mv.mov === "Egreso" && mv.categoria === "Pago TDC Familiar" && mv.subcategoria === nombreFamiliar) {
+        const mesIdx = parseInt(mv.fecha.slice(5, 7), 10) - 1;
+        if (mesIdx >= 0 && mesIdx < 12) totales[mesIdx] += Number(mv.cantidad);
+      }
+    });
+    return totales;
+  }
+
+  function exportarCSV() {
+    const headers = ["Familiar", "Parentesco", "Concepto", ...mesesLabel, "Total año"];
+    const filas = [];
+    familiares.forEach((f) => {
+      const aportPorMes = aportacionPorMes(f.nombre);
+      const totalAport = aportPorMes.reduce((s, v) => s + v, 0);
+      filas.push([f.nombre, f.parentesco || "", "Aportación", ...aportPorMes.map((v) => (v > 0 ? v : "")), totalAport]);
+      const tdcPorMes = pagoTDCPorMes(f.nombre);
+      const totalTDC = tdcPorMes.reduce((s, v) => s + v, 0);
+      filas.push([f.nombre, f.parentesco || "", "Pago TDC", ...tdcPorMes.map((v) => (v > 0 ? v : "")), totalTDC]);
+    });
+    const totalAportPorMes = mesesLabel.map((_, i) => familiares.reduce((s, f) => s + aportacionPorMes(f.nombre)[i], 0));
+    const totalTDCPorMes = mesesLabel.map((_, i) => familiares.reduce((s, f) => s + pagoTDCPorMes(f.nombre)[i], 0));
+    const filaTotalAport = ["", "", "Total Aportación", ...totalAportPorMes, totalAportPorMes.reduce((s, v) => s + v, 0)];
+    const filaTotalTDC = ["", "", "Total Pago TDC", ...totalTDCPorMes, totalTDCPorMes.reduce((s, v) => s + v, 0)];
+    const escape = (v) => {
+      const str = String(v ?? "");
+      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
+    };
+    const encabezado = [["Estado de cuenta de Familia"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, filaTotalAport, filaTotalTDC].map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `Familia_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const filas = [];
+    familiares.forEach((f) => {
+      const aportPorMes = aportacionPorMes(f.nombre);
+      const totalAport = aportPorMes.reduce((s, v) => s + v, 0);
+      filas.push(`<tr>
+        <td>${f.nombre}</td><td>${f.parentesco || "-"}</td><td>Aportación</td>
+        ${aportPorMes.map((v) => `<td class="num">${v > 0 ? fmt(v) : "-"}</td>`).join("")}
+        <td class="num">${fmt(totalAport)}</td>
+      </tr>`);
+      const tdcPorMes = pagoTDCPorMes(f.nombre);
+      const totalTDC = tdcPorMes.reduce((s, v) => s + v, 0);
+      filas.push(`<tr>
+        <td>${f.nombre}</td><td>${f.parentesco || "-"}</td><td>Pago TDC</td>
+        ${tdcPorMes.map((v) => `<td class="num">${v > 0 ? fmt(v) : "-"}</td>`).join("")}
+        <td class="num">${fmt(totalTDC)}</td>
+      </tr>`);
+    });
+    const totalAportPorMes = mesesLabel.map((_, i) => familiares.reduce((s, f) => s + aportacionPorMes(f.nombre)[i], 0));
+    const totalTDCPorMes = mesesLabel.map((_, i) => familiares.reduce((s, f) => s + pagoTDCPorMes(f.nombre)[i], 0));
+    const filaTotalAport = `<tr class="total"><td colspan="3">Total Aportación</td>${totalAportPorMes.map((v) => `<td class="num">${fmt(v)}</td>`).join("")}<td class="num">${fmt(totalAportPorMes.reduce((s, v) => s + v, 0))}</td></tr>`;
+    const filaTotalTDC = `<tr class="total"><td colspan="3">Total Pago TDC</td>${totalTDCPorMes.map((v) => `<td class="num">${fmt(v)}</td>`).join("")}<td class="num">${fmt(totalTDCPorMes.reduce((s, v) => s + v, 0))}</td></tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Familia</title>
+      <style>
+        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 20px; margin: 0 0 4px; }
+        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 4px 5px; text-align: left; }
+        th { background: #F4CCCC; font-weight: 700; }
+        td.num, th.num { text-align: right; }
+        tr.total td { font-weight: 700; background: #FFF2CC; }
+        @media print { body { padding: 0; } table { font-size: 8px; } }
+      </style></head>
+      <body>
+        <h1>Estado de cuenta de Familia</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+        <table>
+          <thead><tr>
+            <th>Familiar</th><th>Parentesco</th><th>Concepto</th>
+            ${mesesLabel.map((m) => `<th class="num">${m}</th>`).join("")}
+            <th class="num">Total año</th>
+          </tr></thead>
+          <tbody>${filas.join("")}${filaTotalAport}${filaTotalTDC}</tbody>
+        </table>
+        <script>window.onload = () => { window.print(); };</script>
+      </body></html>`;
+    const ventana = window.open("", "_blank");
+    if (ventana) { ventana.document.write(html); ventana.document.close(); }
+  }
+
+  function Tarjeta({ f }) {
+    const aportPorMes = aportacionPorMes(f.nombre);
+    const tdcPorMes = pagoTDCPorMes(f.nombre);
+    const totalAport = aportPorMes.reduce((s, v) => s + v, 0);
+    const totalTDC = tdcPorMes.reduce((s, v) => s + v, 0);
+    return (
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: "#fff" }}>
+        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{f.nombre}</p>
+        {f.parentesco && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{f.parentesco}</p>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Aportación (año)</span><br /><b>{fmt(totalAport)}</b></div>
+          <div><span style={{ color: "#777" }}>Pago TDC (año)</span><br /><b>{fmt(totalTDC)}</b></div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 Descargar PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
+      </div>
+      <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
+        Para registrar un movimiento, ve a Registro → Egreso → Tipo "Familia" → Aportación o Pago TDC Familiar → elige el familiar.
+      </p>
+      {familiares.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes familiares registrados. Agrégalos desde Datos → Egresos → Tipo "Familia".</p>}
+      {familiares.map((f) => <Tarjeta key={f.id} f={f} />)}
+    </div>
+  );
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -2618,7 +3359,30 @@ export default function App() {
       setLoaded(false);
       const { data: cat } = await supabase.from("catalogos").select("data").eq("user_id", userId).maybeSingle();
       if (cat && cat.data && Object.keys(cat.data).length > 0) {
-        setCatalog({ ...DEFAULT_CATALOG, ...cat.data });
+        const datosCargados = { ...cat.data };
+        if (Array.isArray(datosCargados.familiares) && datosCargados.familiares.some((f) => typeof f === "string")) {
+          datosCargados.familiares = datosCargados.familiares.map((f) =>
+            typeof f === "string" ? { id: uid(), nombre: f, parentesco: "" } : f
+          );
+        }
+        const tiposFusionados = Array.from(new Set([...(DEFAULT_CATALOG.tipos), ...(datosCargados.tipos || [])]));
+        const categoriasFusionadas = { ...DEFAULT_CATALOG.categorias };
+        Object.keys(datosCargados.categorias || {}).forEach((k) => {
+          categoriasFusionadas[k] = datosCargados.categorias[k];
+        });
+        const subcategoriasFusionadas = { ...DEFAULT_CATALOG.subcategorias };
+        Object.keys(datosCargados.subcategorias || {}).forEach((k) => {
+          subcategoriasFusionadas[k] = datosCargados.subcategorias[k];
+        });
+        const ingresoSubFusionado = { ...DEFAULT_CATALOG.ingresoSub };
+        Object.keys(datosCargados.ingresoSub || {}).forEach((k) => {
+          ingresoSubFusionado[k] = datosCargados.ingresoSub[k];
+        });
+        setCatalog({
+          ...DEFAULT_CATALOG, ...datosCargados,
+          tipos: tiposFusionados, categorias: categoriasFusionadas,
+          subcategorias: subcategoriasFusionadas, ingresoSub: ingresoSubFusionado
+        });
       } else {
         await supabase.from("catalogos").insert({ user_id: userId, data: DEFAULT_CATALOG });
         setCatalog(DEFAULT_CATALOG);
@@ -2639,7 +3403,23 @@ export default function App() {
 
   async function addMovimiento(entry) {
     const { data, error } = await supabase.from("movimientos").insert({ ...entry, user_id: session.user.id }).select().single();
-    if (!error && data) setMovimientos((prev) => [{ ...data, cantidad: Number(data.cantidad) }, ...prev]);
+    if (!error && data) {
+      setMovimientos((prev) => [{ ...data, cantidad: Number(data.cantidad) }, ...prev]);
+      if (entry.mov === "Egreso" && (entry.categoria === "Bancario" || entry.categoria === "Crédito") && entry.subcategoria) {
+        const lista = catalogRef.current.prestamosBancarios || [];
+        const prestamo = lista.find((p) => p.nombre === entry.subcategoria && p.categoria === entry.categoria);
+        if (prestamo) {
+          const nuevoAcumulado = Math.round((Number(prestamo.acumulado || 0) + Number(entry.cantidad)) * 100) / 100;
+          const liquidado = nuevoAcumulado >= prestamo.montoPrestamo;
+          const actualizado = {
+            ...catalogRef.current,
+            prestamosBancarios: lista.map((p) => (p.id === prestamo.id ? { ...p, acumulado: nuevoAcumulado, ultimoPago: entry.fecha, activa: !liquidado } : p))
+          };
+          setCatalog(actualizado);
+          guardarCatalogoAhora(actualizado);
+        }
+      }
+    }
   }
 
   async function deleteMovimiento(id) {
@@ -2660,6 +3440,18 @@ export default function App() {
       };
       setCatalog(actualizado);
       guardarCatalogoAhora(actualizado);
+    } else if (mov && mov.mov === "Egreso" && (mov.categoria === "Bancario" || mov.categoria === "Crédito") && mov.subcategoria) {
+      const lista = catalogRef.current.prestamosBancarios || [];
+      const prestamo = lista.find((p) => p.nombre === mov.subcategoria && p.categoria === mov.categoria);
+      if (prestamo) {
+        const nuevoAcumulado = Math.max(0, Math.round((Number(prestamo.acumulado || 0) - Number(mov.cantidad)) * 100) / 100);
+        const actualizado = {
+          ...catalogRef.current,
+          prestamosBancarios: lista.map((p) => (p.id === prestamo.id ? { ...p, acumulado: nuevoAcumulado, activa: true } : p))
+        };
+        setCatalog(actualizado);
+        guardarCatalogoAhora(actualizado);
+      }
     }
   }
 
@@ -2750,6 +3542,15 @@ export default function App() {
     guardarCatalogoAhora(actualizado);
   }
 
+  function toggleActivaPrestamoBancarioApp(id) {
+    const actualizado = {
+      ...catalogRef.current,
+      prestamosBancarios: (catalogRef.current.prestamosBancarios || []).map((p) => (p.id === id ? { ...p, activa: !p.activa } : p))
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
   }
@@ -2801,6 +3602,8 @@ export default function App() {
       {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "servicios" && <ServiciosTab servicios={catalog.servicios || []} toggleActiva={toggleActivaServicioApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "seguros" && <SegurosTab seguros={catalog.seguros || []} toggleActiva={toggleActivaSeguroApp} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "prestamos" && <PrestamosTab prestamosBancarios={catalog.prestamosBancarios || []} prestamosTerceros={catalog.prestamosTerceros || []} toggleActivaBancario={toggleActivaPrestamoBancarioApp} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "familia" && <FamiliaTab familiares={catalog.familiares || []} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "ahorro" && <AhorroTab ahorros={catalog.ahorros || []} toggleActiva={toggleActivaAhorroApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "inversion" && <InversionTab inversiones={catalog.inversiones || []} toggleActiva={toggleActivaInversionApp} movimientos={movimientos} userEmail={session.user.email} />}
     </div>
