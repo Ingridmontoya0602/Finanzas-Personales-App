@@ -563,6 +563,9 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                     } else if (categoria === "Bancario" || categoria === "Crédito") {
                       const prb = (catalog.prestamosBancarios || []).find((p) => p.nombre === v);
                       if (prb) setCantidad(String(prb.aportacion));
+                    } else if (categoria === "Aportación") {
+                      const fam = (catalog.familiares || []).find((f) => f.nombre === v);
+                      if (fam && fam.aportacion) setCantidad(String(fam.aportacion));
                     }
                   }} style={selStyle(errors.subcategoria)}>
                     <option value="">Selecciona...</option>
@@ -571,9 +574,15 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                   {((categoria === "Membresías" && (catalog.membresias || []).some((m) => m.nombre === subcategoria)) ||
                     (categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria && !s.esVariable)) ||
                     (categoria === "Seguros" && (catalog.seguros || []).some((s) => s.nombre === subcategoria)) ||
-                    ((categoria === "Bancario" || categoria === "Crédito") && (catalog.prestamosBancarios || []).some((p) => p.nombre === subcategoria))) && subcategoria && (
+                    ((categoria === "Bancario" || categoria === "Crédito") && (catalog.prestamosBancarios || []).some((p) => p.nombre === subcategoria)) ||
+                    (categoria === "Aportación" && (catalog.familiares || []).some((f) => f.nombre === subcategoria && f.aportacion))) && subcategoria && (
                     <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                      Te puse el costo registrado en Cantidad — puedes ajustarlo si pagaste distinto.
+                      Te puse el monto registrado en Cantidad — puedes ajustarlo si pagaste distinto.
+                    </p>
+                  )}
+                  {categoria === "Pago TDC Familiar" && subcategoria && (
+                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
+                      Pago a TDC es de monto libre — captura el total que pagaste este mes.
                     </p>
                   )}
                   {categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria && s.esVariable) && (
@@ -949,6 +958,12 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [editandoPrtId, setEditandoPrtId] = useState(null);
   const [famNombre, setFamNombre] = useState("");
   const [famParentesco, setFamParentesco] = useState("");
+  const [famCategoria, setFamCategoria] = useState("");
+  const [famMetodo, setFamMetodo] = useState(catalog.metodos[0] || "Efectivo");
+  const [famCuenta, setFamCuenta] = useState("");
+  const [famMeta, setFamMeta] = useState("");
+  const [famPlazo, setFamPlazo] = useState("");
+  const [famAportacion, setFamAportacion] = useState("");
   const [editandoFamId, setEditandoFamId] = useState(null);
 
   function limpiarFormMembresia() {
@@ -1263,23 +1278,33 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   }
 
   function limpiarFormFamiliar() {
-    setFamNombre(""); setFamParentesco(""); setEditandoFamId(null);
+    setFamNombre(""); setFamParentesco(""); setFamCategoria(""); setFamMetodo(catalog.metodos[0] || "Efectivo");
+    setFamCuenta(""); setFamMeta(""); setFamPlazo(""); setFamAportacion(""); setEditandoFamId(null);
   }
 
   function guardarFamiliar() {
-    if (!famNombre) return;
-    const fam = { id: editandoFamId || uid(), nombre: famNombre, parentesco: famParentesco };
+    if (!famNombre || !famMeta || parseFloat(famMeta) <= 0) return;
+    const existente = (catalog.familiares || []).find((f) => f.id === editandoFamId);
+    const fam = {
+      id: editandoFamId || uid(), activa: true, nombre: famNombre, parentesco: famParentesco,
+      categoria: famCategoria, metodo: famMetodo, cuenta: famCuenta,
+      meta: parseFloat(famMeta), plazoMeses: parseInt(famPlazo) || 0,
+      aportacion: parseFloat(famAportacion) || 0,
+      acumuladoAport: existente ? existente.acumuladoAport : 0,
+      acumuladoTDC: existente ? existente.acumuladoTDC : 0,
+      ultimoPago: existente ? existente.ultimoPago : ""
+    };
     const lista = catalog.familiares || [];
     const yaExiste = lista.some((f) => f.id === fam.id);
     const nuevosFamiliares = yaExiste ? lista.map((f) => (f.id === fam.id ? { ...f, ...fam } : f)) : [fam, ...lista];
-    const subcatsAportacion = catalog.subcategorias["Aportación"] || [];
-    const nuevasSubcatsAportacion = subcatsAportacion.includes(famNombre) ? subcatsAportacion : [...subcatsAportacion, famNombre];
-    const subcatsPagoTDC = catalog.subcategorias["Pago TDC Familiar"] || [];
-    const nuevasSubcatsPagoTDC = subcatsPagoTDC.includes(famNombre) ? subcatsPagoTDC : [...subcatsPagoTDC, famNombre];
+    const subcatsAport = catalog.subcategorias["Aportación"] || [];
+    const nuevasSubcatsAport = subcatsAport.includes(famNombre) ? subcatsAport : [...subcatsAport, famNombre];
+    const subcatsTDC = catalog.subcategorias["Pago TDC Familiar"] || [];
+    const nuevasSubcatsTDC = subcatsTDC.includes(famNombre) ? subcatsTDC : [...subcatsTDC, famNombre];
     const actualizado = {
       ...catalog,
       familiares: nuevosFamiliares,
-      subcategorias: { ...catalog.subcategorias, "Aportación": nuevasSubcatsAportacion, "Pago TDC Familiar": nuevasSubcatsPagoTDC }
+      subcategorias: { ...catalog.subcategorias, "Aportación": nuevasSubcatsAport, "Pago TDC Familiar": nuevasSubcatsTDC }
     };
     setCatalog(actualizado);
     guardarAhora(actualizado);
@@ -1288,10 +1313,18 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
 
   function editarFamiliar(f) {
     setEditandoFamId(f.id); setFamNombre(f.nombre); setFamParentesco(f.parentesco || "");
+    setFamCategoria(f.categoria || ""); setFamMetodo(f.metodo || catalog.metodos[0] || "Efectivo");
+    setFamCuenta(f.cuenta || ""); setFamMeta(String(f.meta || "")); setFamPlazo(String(f.plazoMeses || ""));
+    setFamAportacion(String(f.aportacion || ""));
+  }
+
+  function toggleActivaFamiliar(id) {
+    const actualizado = { ...catalog, familiares: (catalog.familiares || []).map((f) => (f.id === id ? { ...f, activa: !f.activa } : f)) };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
   }
 
   function eliminarFamiliar(id) {
-    const fam = (catalog.familiares || []).find((f) => f.id === id);
     const actualizado = { ...catalog, familiares: (catalog.familiares || []).filter((f) => f.id !== id) };
     setCatalog(actualizado);
     guardarAhora(actualizado);
@@ -1301,6 +1334,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const cuentasServDisponibles = catalog.cuentas[servMetodo] || [];
   const cuentasSegDisponibles = catalog.cuentas[segMetodo] || [];
   const cuentasPrbDisponibles = catalog.cuentas[prbMetodo] || [];
+  const cuentasFamDisponibles = catalog.cuentas[famMetodo] || [];
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
     { id: "ingresos", label: "Ingresos" },
@@ -1623,6 +1657,34 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                 <Field label="Parentesco">
                   <input type="text" value={famParentesco} onChange={(e) => setFamParentesco(e.target.value)} style={inputBase} placeholder="Ej. Madre, Padre, Hermano" />
                 </Field>
+                <Field label="Categoría (opcional)">
+                  <input type="text" value={famCategoria} onChange={(e) => setFamCategoria(e.target.value)} style={inputBase} placeholder="Ej. Nuclear, Papás" />
+                </Field>
+                <Field label="Método de pago (Aportación)">
+                  <select value={famMetodo} onChange={(e) => { setFamMetodo(e.target.value); setFamCuenta(""); }} style={inputBase}>
+                    {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </Field>
+                {cuentasFamDisponibles.length > 0 && (
+                  <Field label="Cuenta / tarjeta">
+                    <select value={famCuenta} onChange={(e) => setFamCuenta(e.target.value)} style={inputBase}>
+                      <option value="">Selecciona...</option>
+                      {cuentasFamDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </Field>
+                )}
+                <Field label="Meta de aportación (total a dar)">
+                  <input type="number" inputMode="decimal" value={famMeta} onChange={(e) => setFamMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
+                </Field>
+                <Field label="Plazo (meses)">
+                  <input type="number" inputMode="numeric" value={famPlazo} onChange={(e) => setFamPlazo(e.target.value)} style={inputBase} placeholder="Ej. 12" />
+                </Field>
+                <Field label="Aportación mensual">
+                  <input type="number" inputMode="decimal" value={famAportacion} onChange={(e) => setFamAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
+                </Field>
+                <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
+                  Pagos a TDC se registran aparte con monto libre cada vez — no necesitan meta fija.
+                </p>
                 <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                   <Btn primary full onClick={guardarFamiliar}>{editandoFamId ? "Guardar cambios" : "Agregar familiar"}</Btn>
                   {editandoFamId && <Btn full onClick={limpiarFormFamiliar}>Cancelar</Btn>}
@@ -1632,14 +1694,25 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
               <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus familiares</p>
               {(catalog.familiares || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin familiares aún.</p>}
               {(catalog.familiares || []).map((f) => (
-                <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: "#fff" }}>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{f.nombre}</p>
-                    {f.parentesco && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{f.parentesco}</p>}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                    <button onClick={() => editarFamiliar(f)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
-                    <button onClick={() => eliminarFamiliar(f.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                <div key={f.id} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 8, background: f.activa ? "#fff" : SHEET.gris }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <div>
+                      <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{f.nombre}
+                        {f.parentesco && <span style={{ fontWeight: 400, fontSize: 11, color: "#777" }}> · {f.parentesco}</span>}
+                      </p>
+                      <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>
+                        Meta {fmt(f.meta || 0)} · {f.plazoMeses || 0} meses · Aport. {fmt(f.aportacion || 0)}
+                      </p>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                      <button onClick={() => toggleActivaFamiliar(f.id)} style={{
+                        fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3,
+                        cursor: "pointer", fontFamily: SHEET.fuente, border: "1px solid " + SHEET.grisBorde,
+                        background: f.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                      }}>{f.activa ? "Activo" : "Inactivo"}</button>
+                      <button onClick={() => editarFamiliar(f)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+                      <button onClick={() => eliminarFamiliar(f.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -3193,52 +3266,54 @@ function InversionTab({ inversiones, toggleActiva, movimientos, userEmail }) {
   );
 }
 
-function FamiliaTab({ familiares, movimientos, userEmail }) {
+function FamiliaTab({ familiares, toggleActiva, movimientos, userEmail }) {
   const mesesLabel = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+  const activos = familiares.filter((f) => f.activa);
+  const inactivos = familiares.filter((f) => !f.activa);
 
-  function aportacionPorMes(nombreFamiliar) {
+  function aportPorMes(nombreFamiliar) {
     const totales = new Array(12).fill(0);
     movimientos.forEach((mv) => {
       if (mv.mov === "Egreso" && mv.categoria === "Aportación" && mv.subcategoria === nombreFamiliar) {
-        const mesIdx = parseInt(mv.fecha.slice(5, 7), 10) - 1;
-        if (mesIdx >= 0 && mesIdx < 12) totales[mesIdx] += Number(mv.cantidad);
+        const i = parseInt(mv.fecha.slice(5, 7), 10) - 1;
+        if (i >= 0 && i < 12) totales[i] += Number(mv.cantidad);
       }
     });
     return totales;
   }
 
-  function pagoTDCPorMes(nombreFamiliar) {
+  function tdcPorMes(nombreFamiliar) {
     const totales = new Array(12).fill(0);
     movimientos.forEach((mv) => {
       if (mv.mov === "Egreso" && mv.categoria === "Pago TDC Familiar" && mv.subcategoria === nombreFamiliar) {
-        const mesIdx = parseInt(mv.fecha.slice(5, 7), 10) - 1;
-        if (mesIdx >= 0 && mesIdx < 12) totales[mesIdx] += Number(mv.cantidad);
+        const i = parseInt(mv.fecha.slice(5, 7), 10) - 1;
+        if (i >= 0 && i < 12) totales[i] += Number(mv.cantidad);
       }
     });
     return totales;
   }
 
   function exportarCSV() {
-    const headers = ["Familiar", "Parentesco", "Concepto", ...mesesLabel, "Total año"];
-    const filas = [];
-    familiares.forEach((f) => {
-      const aportPorMes = aportacionPorMes(f.nombre);
-      const totalAport = aportPorMes.reduce((s, v) => s + v, 0);
-      filas.push([f.nombre, f.parentesco || "", "Aportación", ...aportPorMes.map((v) => (v > 0 ? v : "")), totalAport]);
-      const tdcPorMes = pagoTDCPorMes(f.nombre);
-      const totalTDC = tdcPorMes.reduce((s, v) => s + v, 0);
-      filas.push([f.nombre, f.parentesco || "", "Pago TDC", ...tdcPorMes.map((v) => (v > 0 ? v : "")), totalTDC]);
+    const headers = ["Familiar", "Parentesco", "Estatus", "Meta", "Plazo", "Aport. mensual", "Acum. Aport.", "Pendiente", "Acum. TDC", "Prom. TDC/mes",
+      ...mesesLabel.flatMap((m) => [`${m} Aport.`, `${m} TDC`]), "Total Aport. año", "Total TDC año"];
+    const filas = familiares.map((f) => {
+      const ap = aportPorMes(f.nombre);
+      const td = tdcPorMes(f.nombre);
+      const totalAp = ap.reduce((s, v) => s + v, 0);
+      const totalTDC = td.reduce((s, v) => s + v, 0);
+      const mesesConTDC = td.filter((v) => v > 0).length || 1;
+      return [
+        f.nombre, f.parentesco || "", f.activa ? "Activo" : "Inactivo",
+        f.meta || 0, f.plazoMeses || 0, f.aportacion || 0,
+        f.acumuladoAport || 0, Math.max(0, (f.meta || 0) - (f.acumuladoAport || 0)),
+        f.acumuladoTDC || 0, Math.round(((f.acumuladoTDC || 0) / mesesConTDC) * 100) / 100,
+        ...mesesLabel.flatMap((_, i) => [ap[i] > 0 ? ap[i] : "", td[i] > 0 ? td[i] : ""]),
+        totalAp, totalTDC
+      ];
     });
-    const totalAportPorMes = mesesLabel.map((_, i) => familiares.reduce((s, f) => s + aportacionPorMes(f.nombre)[i], 0));
-    const totalTDCPorMes = mesesLabel.map((_, i) => familiares.reduce((s, f) => s + pagoTDCPorMes(f.nombre)[i], 0));
-    const filaTotalAport = ["", "", "Total Aportación", ...totalAportPorMes, totalAportPorMes.reduce((s, v) => s + v, 0)];
-    const filaTotalTDC = ["", "", "Total Pago TDC", ...totalTDCPorMes, totalTDCPorMes.reduce((s, v) => s + v, 0)];
-    const escape = (v) => {
-      const str = String(v ?? "");
-      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
-    };
+    const escape = (v) => { const s = String(v ?? ""); return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s; };
     const encabezado = [["Estado de cuenta de Familia"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
-    const csv = [...encabezado, headers, ...filas, filaTotalAport, filaTotalTDC].map((row) => row.map(escape).join(",")).join("\n");
+    const csv = [...encabezado, headers, ...filas].map((row) => row.map(escape).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -3248,51 +3323,44 @@ function FamiliaTab({ familiares, movimientos, userEmail }) {
   }
 
   function exportarPDF() {
-    const filas = [];
-    familiares.forEach((f) => {
-      const aportPorMes = aportacionPorMes(f.nombre);
-      const totalAport = aportPorMes.reduce((s, v) => s + v, 0);
-      filas.push(`<tr>
-        <td>${f.nombre}</td><td>${f.parentesco || "-"}</td><td>Aportación</td>
-        ${aportPorMes.map((v) => `<td class="num">${v > 0 ? fmt(v) : "-"}</td>`).join("")}
-        <td class="num">${fmt(totalAport)}</td>
-      </tr>`);
-      const tdcPorMes = pagoTDCPorMes(f.nombre);
-      const totalTDC = tdcPorMes.reduce((s, v) => s + v, 0);
-      filas.push(`<tr>
-        <td>${f.nombre}</td><td>${f.parentesco || "-"}</td><td>Pago TDC</td>
-        ${tdcPorMes.map((v) => `<td class="num">${v > 0 ? fmt(v) : "-"}</td>`).join("")}
-        <td class="num">${fmt(totalTDC)}</td>
-      </tr>`);
-    });
-    const totalAportPorMes = mesesLabel.map((_, i) => familiares.reduce((s, f) => s + aportacionPorMes(f.nombre)[i], 0));
-    const totalTDCPorMes = mesesLabel.map((_, i) => familiares.reduce((s, f) => s + pagoTDCPorMes(f.nombre)[i], 0));
-    const filaTotalAport = `<tr class="total"><td colspan="3">Total Aportación</td>${totalAportPorMes.map((v) => `<td class="num">${fmt(v)}</td>`).join("")}<td class="num">${fmt(totalAportPorMes.reduce((s, v) => s + v, 0))}</td></tr>`;
-    const filaTotalTDC = `<tr class="total"><td colspan="3">Total Pago TDC</td>${totalTDCPorMes.map((v) => `<td class="num">${fmt(v)}</td>`).join("")}<td class="num">${fmt(totalTDCPorMes.reduce((s, v) => s + v, 0))}</td></tr>`;
+    const filas = familiares.map((f) => {
+      const ap = aportPorMes(f.nombre);
+      const td = tdcPorMes(f.nombre);
+      const totalAp = ap.reduce((s, v) => s + v, 0);
+      const totalTDC = td.reduce((s, v) => s + v, 0);
+      const pendiente = Math.max(0, (f.meta || 0) - (f.acumuladoAport || 0));
+      const mesesConTDC = td.filter((v) => v > 0).length || 1;
+      const promTDC = Math.round(((f.acumuladoTDC || 0) / mesesConTDC) * 100) / 100;
+      return `<tr>
+        <td>${f.nombre}</td><td>${f.parentesco || "-"}</td><td>${f.activa ? "Activo" : "Inactivo"}</td>
+        <td class="num">${fmt(f.meta || 0)}</td><td class="num">${f.plazoMeses || 0}</td><td class="num">${fmt(f.aportacion || 0)}</td>
+        <td class="num">${fmt(f.acumuladoAport || 0)}</td><td class="num">${fmt(pendiente)}</td>
+        <td class="num">${fmt(f.acumuladoTDC || 0)}</td><td class="num">${fmt(promTDC)}</td>
+        ${mesesLabel.map((_, i) => `<td class="num">${ap[i] > 0 ? fmt(ap[i]) : "-"}</td><td class="num">${td[i] > 0 ? fmt(td[i]) : "-"}</td>`).join("")}
+        <td class="num">${fmt(totalAp)}</td><td class="num">${fmt(totalTDC)}</td>
+      </tr>`;
+    }).join("");
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Familia</title>
       <style>
         body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
-        h1 { font-size: 20px; margin: 0 0 4px; }
-        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
-        table { width: 100%; border-collapse: collapse; font-size: 9px; margin-top: 14px; }
-        th, td { border: 1px solid #999; padding: 4px 5px; text-align: left; }
+        h1 { font-size: 20px; margin: 0 0 4px; } p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
+        table { width: 100%; border-collapse: collapse; font-size: 8px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 3px 4px; text-align: left; }
         th { background: #F4CCCC; font-weight: 700; }
         td.num, th.num { text-align: right; }
-        tr.total td { font-weight: 700; background: #FFF2CC; }
-        @media print { body { padding: 0; } table { font-size: 8px; } }
-      </style></head>
-      <body>
+        @media print { body { padding: 0; } }
+      </style></head><body>
         <h1>Estado de cuenta de Familia</h1>
         <p class="sub">Usuario: ${userEmail || ""}</p>
         <p class="sub">Generado el ${fmtDate(todayISO())}</p>
-        <table>
-          <thead><tr>
-            <th>Familiar</th><th>Parentesco</th><th>Concepto</th>
-            ${mesesLabel.map((m) => `<th class="num">${m}</th>`).join("")}
-            <th class="num">Total año</th>
-          </tr></thead>
-          <tbody>${filas.join("")}${filaTotalAport}${filaTotalTDC}</tbody>
-        </table>
+        <table><thead><tr>
+          <th>Familiar</th><th>Parentesco</th><th>Estatus</th>
+          <th class="num">Meta</th><th class="num">Plazo</th><th class="num">Aport. men.</th>
+          <th class="num">Acum. Aport.</th><th class="num">Pendiente</th>
+          <th class="num">Acum. TDC</th><th class="num">Prom. TDC</th>
+          ${mesesLabel.map((m) => `<th class="num">${m} Ap.</th><th class="num">${m} TDC</th>`).join("")}
+          <th class="num">Tot. Aport.</th><th class="num">Tot. TDC</th>
+        </tr></thead><tbody>${filas}</tbody></table>
         <script>window.onload = () => { window.print(); };</script>
       </body></html>`;
     const ventana = window.open("", "_blank");
@@ -3300,18 +3368,38 @@ function FamiliaTab({ familiares, movimientos, userEmail }) {
   }
 
   function Tarjeta({ f }) {
-    const aportPorMes = aportacionPorMes(f.nombre);
-    const tdcPorMes = pagoTDCPorMes(f.nombre);
-    const totalAport = aportPorMes.reduce((s, v) => s + v, 0);
-    const totalTDC = tdcPorMes.reduce((s, v) => s + v, 0);
+    const pendiente = Math.max(0, (f.meta || 0) - (f.acumuladoAport || 0));
+    const mesesConTDC = movimientos.filter((mv) => mv.mov === "Egreso" && mv.categoria === "Pago TDC Familiar" && mv.subcategoria === f.nombre).length;
+    const promTDC = mesesConTDC > 0 ? Math.round(((f.acumuladoTDC || 0) / mesesConTDC) * 100) / 100 : 0;
     return (
-      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: "#fff" }}>
-        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{f.nombre}</p>
-        {f.parentesco && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{f.parentesco}</p>}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
-          <div><span style={{ color: "#777" }}>Aportación (año)</span><br /><b>{fmt(totalAport)}</b></div>
-          <div><span style={{ color: "#777" }}>Pago TDC (año)</span><br /><b>{fmt(totalTDC)}</b></div>
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: f.activa ? "#fff" : SHEET.gris }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{f.nombre}
+              {f.parentesco && <span style={{ fontWeight: 400, fontSize: 11, color: "#777" }}> · {f.parentesco}</span>}
+            </p>
+            {f.categoria && <p style={{ fontSize: 11, color: "#888", margin: "1px 0 0" }}>{f.categoria}</p>}
+          </div>
+          <button onClick={() => toggleActiva(f.id)} style={{
+            fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3,
+            cursor: "pointer", fontFamily: SHEET.fuente, border: "1px solid " + SHEET.grisBorde,
+            background: f.activa ? SHEET.verde : "#fff", color: SHEET.texto, flexShrink: 0
+          }}>{f.activa ? "Activo" : "Inactivo"}</button>
         </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Meta aport.</span><br /><b>{fmt(f.meta || 0)}</b></div>
+          <div><span style={{ color: "#777" }}>Acumulado</span><br /><b>{fmt(f.acumuladoAport || 0)}</b></div>
+          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b>{fmt(pendiente)}</b></div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 6, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Acum. TDC</span><br /><b>{fmt(f.acumuladoTDC || 0)}</b></div>
+          <div><span style={{ color: "#777" }}>Prom. TDC/mes</span><br /><b>{fmt(promTDC)}</b></div>
+          <div><span style={{ color: "#777" }}>Aport. mensual</span><br /><b>{fmt(f.aportacion || 0)}</b></div>
+        </div>
+        <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic", color: "#555" }}>
+          {f.plazoMeses || 0} meses · {f.metodo}{f.cuenta ? ` · ${f.cuenta}` : ""}
+          {f.ultimoPago ? ` · Últ. pago ${fmtDate(f.ultimoPago)}` : ""}
+        </p>
       </div>
     );
   }
@@ -3323,10 +3411,17 @@ function FamiliaTab({ familiares, movimientos, userEmail }) {
         <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Descargar Excel</Btn>
       </div>
       <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 14 }}>
-        Para registrar un movimiento, ve a Registro → Egreso → Tipo "Familia" → Aportación o Pago TDC Familiar → elige el familiar.
+        Registro → Egreso → Tipo "Familia" → "Aportación" o "Pago TDC Familiar" → elige el familiar.
       </p>
-      {familiares.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes familiares registrados. Agrégalos desde Datos → Egresos → Tipo "Familia".</p>}
-      {familiares.map((f) => <Tarjeta key={f.id} f={f} />)}
+      <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "0 0 10px" }}>Activos</h3>
+      {activos.length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin familiares activos. Agrégalos desde Datos → Egresos → Tipo "Familia".</p>}
+      {activos.map((f) => <Tarjeta key={f.id} f={f} />)}
+      {inactivos.length > 0 && (
+        <>
+          <h3 style={{ fontSize: 15, fontStyle: "italic", margin: "16px 0 10px" }}>Inactivos</h3>
+          {inactivos.map((f) => <Tarjeta key={f.id} f={f} />)}
+        </>
+      )}
     </div>
   );
 }
@@ -3419,6 +3514,20 @@ export default function App() {
           guardarCatalogoAhora(actualizado);
         }
       }
+      if (entry.mov === "Egreso" && (entry.categoria === "Aportación" || entry.categoria === "Pago TDC Familiar") && entry.subcategoria) {
+        const lista = catalogRef.current.familiares || [];
+        const fam = lista.find((f) => f.nombre === entry.subcategoria);
+        if (fam) {
+          const campo = entry.categoria === "Aportación" ? "acumuladoAport" : "acumuladoTDC";
+          const nuevo = Math.round((Number(fam[campo] || 0) + Number(entry.cantidad)) * 100) / 100;
+          const actualizado = {
+            ...catalogRef.current,
+            familiares: lista.map((f) => (f.id === fam.id ? { ...f, [campo]: nuevo, ultimoPago: entry.fecha } : f))
+          };
+          setCatalog(actualizado);
+          guardarCatalogoAhora(actualizado);
+        }
+      }
     }
   }
 
@@ -3448,6 +3557,19 @@ export default function App() {
         const actualizado = {
           ...catalogRef.current,
           prestamosBancarios: lista.map((p) => (p.id === prestamo.id ? { ...p, acumulado: nuevoAcumulado, activa: true } : p))
+        };
+        setCatalog(actualizado);
+        guardarCatalogoAhora(actualizado);
+      }
+    } else if (mov && mov.mov === "Egreso" && (mov.categoria === "Aportación" || mov.categoria === "Pago TDC Familiar") && mov.subcategoria) {
+      const lista = catalogRef.current.familiares || [];
+      const fam = lista.find((f) => f.nombre === mov.subcategoria);
+      if (fam) {
+        const campo = mov.categoria === "Aportación" ? "acumuladoAport" : "acumuladoTDC";
+        const nuevo = Math.max(0, Math.round((Number(fam[campo] || 0) - Number(mov.cantidad)) * 100) / 100);
+        const actualizado = {
+          ...catalogRef.current,
+          familiares: lista.map((f) => (f.id === fam.id ? { ...f, [campo]: nuevo } : f))
         };
         setCatalog(actualizado);
         guardarCatalogoAhora(actualizado);
@@ -3551,6 +3673,15 @@ export default function App() {
     guardarCatalogoAhora(actualizado);
   }
 
+  function toggleActivaFamiliarApp(id) {
+    const actualizado = {
+      ...catalogRef.current,
+      familiares: (catalogRef.current.familiares || []).map((f) => (f.id === id ? { ...f, activa: !f.activa } : f))
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
+  }
+
   async function handleLogout() {
     await supabase.auth.signOut();
   }
@@ -3603,7 +3734,7 @@ export default function App() {
       {tab === "servicios" && <ServiciosTab servicios={catalog.servicios || []} toggleActiva={toggleActivaServicioApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "seguros" && <SegurosTab seguros={catalog.seguros || []} toggleActiva={toggleActivaSeguroApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "prestamos" && <PrestamosTab prestamosBancarios={catalog.prestamosBancarios || []} prestamosTerceros={catalog.prestamosTerceros || []} toggleActivaBancario={toggleActivaPrestamoBancarioApp} movimientos={movimientos} userEmail={session.user.email} />}
-      {tab === "familia" && <FamiliaTab familiares={catalog.familiares || []} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "familia" && <FamiliaTab familiares={catalog.familiares || []} toggleActiva={toggleActivaFamiliarApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "ahorro" && <AhorroTab ahorros={catalog.ahorros || []} toggleActiva={toggleActivaAhorroApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "inversion" && <InversionTab inversiones={catalog.inversiones || []} toggleActiva={toggleActivaInversionApp} movimientos={movimientos} userEmail={session.user.email} />}
     </div>
