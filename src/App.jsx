@@ -893,24 +893,96 @@ function mesAnterior(ym) {
   return d.toISOString().slice(0, 7);
 }
 
-function calcFijosDelMes(catalog) {
+// Convierte frecuencia a número de meses
+function frecuenciaAMeses(frecuencia) {
+  const map = { "Semanal": 0.25, "Quincenal": 0.5, "Mensual": 1, "Bimestral": 2, "Trimestral": 3, "Semestral": 6, "Anual": 12 };
+  return map[frecuencia] || 1;
+}
+
+// Dado el último pago y la frecuencia, calcula la próxima fecha de pago (YYYY-MM-DD)
+function calcProximoPago(ultPagoISO, frecuencia) {
+  if (!ultPagoISO) return null;
+  const meses = frecuenciaAMeses(frecuencia);
+  const d = new Date(ultPagoISO);
+  if (meses < 1) {
+    d.setDate(d.getDate() + Math.round(meses * 30));
+  } else {
+    d.setMonth(d.getMonth() + Math.round(meses));
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+// Busca el último pago de un item en el historial por categoría + subcategoría
+function ultimoPagoDeHistorial(movimientos, categoria, nombre) {
+  const pagos = movimientos.filter((m) =>
+    m.mov === "Egreso" && m.categoria === categoria && m.subcategoria === nombre
+  );
+  if (pagos.length === 0) return null;
+  return pagos.reduce((max, m) => (m.fecha > max ? m.fecha : max), pagos[0].fecha);
+}
+
+// ¿Toca pagar este item en el mes mesYM (YYYY-MM)?
+function tocaEsteMe(ultPago, frecuencia, mesYM) {
+  if (!ultPago) return true; // sin historial → asumir que sí toca
+  const proximaFecha = calcProximoPago(ultPago, frecuencia);
+  if (!proximaFecha) return true;
+  return proximaFecha.slice(0, 7) === mesYM;
+}
+
+function calcFijosDelMes(catalog, movimientos = [], mesYM = "") {
   const fijosCat = {};
-  // G. Fijo: Membresías activas
-  (catalog.membresias || []).filter((m) => m.activa).forEach((m) => { fijosCat["Membresías"] = (fijosCat["Membresías"] || 0) + (m.costo || 0); });
-  // G. Fijo: Servicios activos
-  (catalog.servicios || []).filter((s) => s.activa).forEach((s) => { if (!s.esVariable) fijosCat["Servicios"] = (fijosCat["Servicios"] || 0) + (s.costo || 0); });
-  // G. Fijo: Seguros activos
-  (catalog.seguros || []).filter((s) => s.activa).forEach((s) => { fijosCat["Seguros"] = (fijosCat["Seguros"] || 0) + (s.costo || 0); });
+  const mes = mesYM || todayISO().slice(0, 7);
+
+  // Membresías activas — solo si toca este mes según frecuencia
+  (catalog.membresias || []).filter((m) => m.activa).forEach((m) => {
+    const ult = ultimoPagoDeHistorial(movimientos, "Membresías", m.nombre);
+    if (tocaEsteMe(ult, m.frecuencia || "Mensual", mes)) {
+      fijosCat["Membresías"] = (fijosCat["Membresías"] || 0) + (m.costo || 0);
+    }
+  });
+
+  // Servicios activos — solo si toca este mes
+  (catalog.servicios || []).filter((s) => s.activa).forEach((s) => {
+    if (s.esVariable) return;
+    const ult = ultimoPagoDeHistorial(movimientos, "Servicios", s.nombre);
+    if (tocaEsteMe(ult, s.frecuencia || "Mensual", mes)) {
+      fijosCat["Servicios"] = (fijosCat["Servicios"] || 0) + (s.costo || 0);
+    }
+  });
+
+  // Seguros activos — solo si toca este mes
+  (catalog.seguros || []).filter((s) => s.activa).forEach((s) => {
+    const ult = ultimoPagoDeHistorial(movimientos, "Seguros", s.nombre);
+    if (tocaEsteMe(ult, s.frecuencia || "Anual", mes)) {
+      fijosCat["Seguros"] = (fijosCat["Seguros"] || 0) + (s.costo || 0);
+    }
+  });
+
   // Préstamos bancarios activos
-  (catalog.prestamosBancarios || []).filter((p) => p.activa).forEach((p) => { fijosCat["Préstamos Bancario/Crédito"] = (fijosCat["Préstamos Bancario/Crédito"] || 0) + (p.pagoPeriodo || 0); });
+  (catalog.prestamosBancarios || []).filter((p) => p.activa).forEach((p) => {
+    fijosCat["Préstamos Bancario/Crédito"] = (fijosCat["Préstamos Bancario/Crédito"] || 0) + (p.pagoPeriodo || 0);
+  });
+
   // Ahorro activo
-  (catalog.ahorros || []).filter((a) => a.activa).forEach((a) => { fijosCat["Ahorro"] = (fijosCat["Ahorro"] || 0) + (a.aportacion || 0); });
+  (catalog.ahorros || []).filter((a) => a.activa).forEach((a) => {
+    fijosCat["Ahorro"] = (fijosCat["Ahorro"] || 0) + (a.aportacion || 0);
+  });
+
   // Inversión activa
-  (catalog.inversiones || []).filter((i) => i.activa).forEach((i) => { fijosCat["Inversión"] = (fijosCat["Inversión"] || 0) + (i.aportacion || 0); });
+  (catalog.inversiones || []).filter((i) => i.activa).forEach((i) => {
+    fijosCat["Inversión"] = (fijosCat["Inversión"] || 0) + (i.aportacion || 0);
+  });
+
   // Familia aportación activa
-  (catalog.familiares || []).filter((f) => f.activa).forEach((f) => { fijosCat["Familia (Aportación)"] = (fijosCat["Familia (Aportación)"] || 0) + (f.aportacion || 0); });
+  (catalog.familiares || []).filter((f) => f.activa).forEach((f) => {
+    fijosCat["Familia (Aportación)"] = (fijosCat["Familia (Aportación)"] || 0) + (f.aportacion || 0);
+  });
+
   // Diferidos activos
-  (catalog.diferidos || []).filter((d) => d.activo).forEach((d) => { fijosCat["Diferidos TDC"] = (fijosCat["Diferidos TDC"] || 0) + (d.aportacion || 0); });
+  (catalog.diferidos || []).filter((d) => d.activo).forEach((d) => {
+    fijosCat["Diferidos TDC"] = (fijosCat["Diferidos TDC"] || 0) + (d.aportacion || 0);
+  });
+
   return fijosCat;
 }
 
@@ -969,7 +1041,7 @@ function PresupuestoEditor({ catalog, setCatalog, guardarAhora, movimientos }) {
     return map;
   }, [movimientos, mesAnt]);
 
-  const fijosMes = useMemo(() => calcFijosDelMes(catalog), [catalog]);
+  const fijosMes = useMemo(() => calcFijosDelMes(catalog, movimientos, mesActual), [catalog, movimientos, mesActual]);
   const totalFijos = Object.values(fijosMes).reduce((s, v) => s + v, 0);
   const totalVariablePresup = CAT_VARIABLES.reduce((s, cat) => s + (catsMes[cat] || 0), 0);
   const totalPresupuestado = totalFijos + totalVariablePresup;
@@ -1152,7 +1224,7 @@ function PresupuestoTab({ catalog, movimientos, userEmail }) {
     return map;
   }, [movsMes]);
 
-  const fijosMes = useMemo(() => calcFijosDelMes(catalog), [catalog]);
+  const fijosMes = useMemo(() => calcFijosDelMes(catalog, movimientos, mesFiltro), [catalog, movimientos, mesFiltro]);
   const totalFijos = Object.values(fijosMes).reduce((s, v) => s + v, 0);
   const totalVariablePresup = CAT_VARIABLES.reduce((s, cat) => s + (catsMes[cat] || 0), 0);
   const totalVariableReal = CAT_VARIABLES.reduce((s, cat) => s + (gastoVariableReal[cat] || 0), 0);
@@ -3521,6 +3593,9 @@ function MembresiasTab({ membresias, toggleActiva, movimientos, userEmail }) {
   }
 
   function Tarjeta({ m }) {
+    const ultPagoHist = ultimoPagoDe(m.nombre);
+    const ultPago = ultPagoHist || m.ultimoPago || null;
+    const proxPago = ultPago ? calcProximoPago(ultPago, m.frecuencia || "Mensual") : null;
     return (
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: m.activa ? "#fff" : SHEET.gris }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -3540,8 +3615,13 @@ function MembresiasTab({ membresias, toggleActiva, movimientos, userEmail }) {
           <div><span style={{ color: "#777" }}>Día de pago</span><br /><b>{m.diaPago}</b></div>
         </div>
         <p style={{ fontSize: 11, color: "#555", margin: "8px 0 0" }}>
-          {m.metodo}{m.cuenta ? ` · ${m.cuenta}` : ""}{m.ultimoPago ? ` · Últ. pago ${fmtDate(m.ultimoPago)}` : ""}
+          {m.metodo}{m.cuenta ? ` · ${m.cuenta}` : ""}{ultPago ? ` · Últ. pago ${fmtDate(ultPago)}` : ""}
         </p>
+        {proxPago && (
+          <p style={{ fontSize: 11, fontWeight: 700, color: proxPago <= todayISO() ? SHEET.rosaBorde : SHEET.verdeBorde, margin: "2px 0 0" }}>
+            📅 Próx. pago: {fmtDate(proxPago)}
+          </p>
+        )}
       </div>
     );
   }
@@ -3680,6 +3760,9 @@ function ServiciosTab({ servicios, toggleActiva, movimientos, userEmail }) {
   }
 
   function Tarjeta({ s }) {
+    const ultPagoHist = ultimoPagoDe(s.nombre);
+    const ultPago = ultPagoHist || s.ultimoPago || null;
+    const proxPago = ultPago ? calcProximoPago(ultPago, s.frecuencia || "Mensual") : null;
     return (
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: s.activa ? "#fff" : SHEET.gris }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -3699,8 +3782,13 @@ function ServiciosTab({ servicios, toggleActiva, movimientos, userEmail }) {
           <div><span style={{ color: "#777" }}>Día de pago</span><br /><b>{s.diaPago}</b></div>
         </div>
         <p style={{ fontSize: 11, color: "#555", margin: "8px 0 0" }}>
-          {s.metodo}{s.cuenta ? ` · ${s.cuenta}` : ""}{s.ultimoPago ? ` · Últ. pago ${fmtDate(s.ultimoPago)}` : ""}
+          {s.metodo}{s.cuenta ? ` · ${s.cuenta}` : ""}{ultPago ? ` · Últ. pago ${fmtDate(ultPago)}` : ""}
         </p>
+        {proxPago && (
+          <p style={{ fontSize: 11, fontWeight: 700, color: proxPago <= todayISO() ? SHEET.rosaBorde : SHEET.verdeBorde, margin: "2px 0 0" }}>
+            📅 Próx. pago: {fmtDate(proxPago)}
+          </p>
+        )}
       </div>
     );
   }
@@ -3861,6 +3949,16 @@ function SegurosTab({ seguros, toggleActiva, movimientos, userEmail }) {
         <p style={{ fontSize: 11, color: "#555", margin: "8px 0 0" }}>
           {s.metodo}{s.cuenta ? ` · ${s.cuenta}` : ""}{s.ultimoPago ? ` · Últ. pago ${fmtDate(s.ultimoPago)}` : ""}
         </p>
+        {(() => {
+          const ultPagoHist = ultimoPagoDe(s.nombre);
+          const ultPago = ultPagoHist || s.ultimoPago || null;
+          const proxPago = ultPago ? calcProximoPago(ultPago, s.frecuencia || "Anual") : null;
+          return proxPago ? (
+            <p style={{ fontSize: 11, fontWeight: 700, color: proxPago <= todayISO() ? SHEET.rosaBorde : SHEET.verdeBorde, margin: "2px 0 0" }}>
+              📅 Próx. pago: {fmtDate(proxPago)}
+            </p>
+          ) : null;
+        })()}
       </div>
     );
   }
