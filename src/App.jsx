@@ -932,6 +932,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [ahoMeta, setAhoMeta] = useState("");
   const [ahoPlazo, setAhoPlazo] = useState("");
   const [ahoAportacion, setAhoAportacion] = useState("");
+  const [ahoFrecuencia, setAhoFrecuencia] = useState("Mensual");
   const [editandoAhoId, setEditandoAhoId] = useState(null);
   const [invNombre, setInvNombre] = useState("");
   const [invCategoria, setInvCategoria] = useState("");
@@ -942,6 +943,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [invMeta, setInvMeta] = useState("");
   const [invPlazo, setInvPlazo] = useState("");
   const [invAportacion, setInvAportacion] = useState("");
+  const [invFrecuencia, setInvFrecuencia] = useState("Mensual");
   const [editandoInvId, setEditandoInvId] = useState(null);
   const [prbVista, setPrbVista] = useState("bancario");
   const [prbNombre, setPrbNombre] = useState("");
@@ -966,6 +968,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [famMeta, setFamMeta] = useState("");
   const [famPlazo, setFamPlazo] = useState("");
   const [famAportacion, setFamAportacion] = useState("");
+  const [famFrecuencia, setFamFrecuencia] = useState("Mensual");
   const [editandoFamId, setEditandoFamId] = useState(null);
 
   function limpiarFormMembresia() {
@@ -1106,15 +1109,21 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
 
   function limpiarFormAhorro() {
     setAhoNombre(""); setAhoCategoria(""); setAhoDescripcion(""); setAhoMetodo(catalog.metodos[0] || "Efectivo"); setAhoCuenta("");
-    setAhoMeta(""); setAhoPlazo(""); setAhoAportacion(""); setEditandoAhoId(null);
+    setAhoMeta(""); setAhoPlazo(""); setAhoAportacion(""); setAhoFrecuencia("Mensual"); setEditandoAhoId(null);
   }
 
   function guardarAhorro() {
-    if (!ahoNombre || !ahoMeta || parseFloat(ahoMeta) <= 0) return;
+    const meta = parseFloat(ahoMeta) || 0;
+    const plazo = parseInt(ahoPlazo) || 0;
+    const aportacion = parseFloat(ahoAportacion) || 0;
+    if (!ahoNombre || (meta <= 0 && plazo <= 0 && aportacion <= 0)) return;
+    const metaFinal = meta > 0 ? meta : Math.round(aportacion * plazo * 100) / 100;
+    const plazoFinal = plazo > 0 ? plazo : (aportacion > 0 && meta > 0 ? Math.ceil(meta / aportacion) : 0);
+    const aportacionFinal = aportacion > 0 ? aportacion : (plazoFinal > 0 && metaFinal > 0 ? Math.round((metaFinal / plazoFinal) * 100) / 100 : 0);
     const aho = {
       id: editandoAhoId || uid(), activa: true, nombre: ahoNombre, categoria: ahoCategoria, descripcion: ahoDescripcion,
-      metodo: ahoMetodo, cuenta: ahoCuenta, meta: parseFloat(ahoMeta), plazoMeses: parseInt(ahoPlazo) || 0,
-      aportacion: parseFloat(ahoAportacion) || 0, acumulado: 0, ultimoPago: ""
+      metodo: ahoMetodo, cuenta: ahoCuenta, meta: metaFinal, plazoMeses: plazoFinal,
+      aportacion: aportacionFinal, frecuencia: ahoFrecuencia, acumulado: 0, ultimoPago: ""
     };
     const lista = catalog.ahorros || [];
     const yaExiste = lista.some((a) => a.id === aho.id);
@@ -1135,6 +1144,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   function editarAhorro(a) {
     setEditandoAhoId(a.id); setAhoNombre(a.nombre); setAhoCategoria(a.categoria); setAhoDescripcion(a.descripcion || ""); setAhoMetodo(a.metodo);
     setAhoCuenta(a.cuenta); setAhoMeta(String(a.meta)); setAhoPlazo(String(a.plazoMeses)); setAhoAportacion(String(a.aportacion));
+    setAhoFrecuencia(a.frecuencia || "Mensual");
   }
 
   function toggleActivaAhorro(id) {
@@ -1154,12 +1164,23 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
     setInvMeta(""); setInvPlazo(""); setInvAportacion(""); setEditandoInvId(null);
   }
 
+  function limpiarFormInversion() {
+    setInvNombre(""); setInvCategoria(""); setInvDescripcion(""); setInvObjetivo(""); setInvMetodo(catalog.metodos[0] || "Efectivo"); setInvCuenta("");
+    setInvMeta(""); setInvPlazo(""); setInvAportacion(""); setInvFrecuencia("Mensual"); setEditandoInvId(null);
+  }
+
   function guardarInversion() {
-    if (!invNombre || !invMeta || parseFloat(invMeta) <= 0) return;
+    const meta = parseFloat(invMeta) || 0;
+    const plazo = parseInt(invPlazo) || 0;
+    const aportacion = parseFloat(invAportacion) || 0;
+    if (!invNombre || (meta <= 0 && plazo <= 0 && aportacion <= 0)) return;
+    const metaFinal = meta > 0 ? meta : Math.round(aportacion * plazo * 100) / 100;
+    const plazoFinal = plazo > 0 ? plazo : (aportacion > 0 && meta > 0 ? Math.ceil(meta / aportacion) : 0);
+    const aportacionFinal = aportacion > 0 ? aportacion : (plazoFinal > 0 && metaFinal > 0 ? Math.round((metaFinal / plazoFinal) * 100) / 100 : 0);
     const inv = {
       id: editandoInvId || uid(), activa: true, nombre: invNombre, categoria: invCategoria, descripcion: invDescripcion, objetivo: invObjetivo,
-      metodo: invMetodo, cuenta: invCuenta, meta: parseFloat(invMeta), plazoMeses: parseInt(invPlazo) || 0,
-      aportacion: parseFloat(invAportacion) || 0, acumulado: 0, ultimoPago: ""
+      metodo: invMetodo, cuenta: invCuenta, meta: metaFinal, plazoMeses: plazoFinal,
+      aportacion: aportacionFinal, frecuencia: invFrecuencia, acumulado: 0, ultimoPago: ""
     };
     const lista = catalog.inversiones || [];
     const yaExiste = lista.some((i) => i.id === inv.id);
@@ -1180,6 +1201,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   function editarInversion(i) {
     setEditandoInvId(i.id); setInvNombre(i.nombre); setInvCategoria(i.categoria); setInvDescripcion(i.descripcion || ""); setInvObjetivo(i.objetivo || ""); setInvMetodo(i.metodo);
     setInvCuenta(i.cuenta); setInvMeta(String(i.meta)); setInvPlazo(String(i.plazoMeses)); setInvAportacion(String(i.aportacion));
+    setInvFrecuencia(i.frecuencia || "Mensual");
   }
 
   function toggleActivaInversion(id) {
@@ -1292,17 +1314,22 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
 
   function limpiarFormFamiliar() {
     setFamNombre(""); setFamParentesco(""); setFamCategoria(""); setFamMetodo(catalog.metodos[0] || "Efectivo");
-    setFamCuenta(""); setFamMeta(""); setFamPlazo(""); setFamAportacion(""); setEditandoFamId(null);
+    setFamCuenta(""); setFamMeta(""); setFamPlazo(""); setFamAportacion(""); setFamFrecuencia("Mensual"); setEditandoFamId(null);
   }
 
   function guardarFamiliar() {
-    if (!famNombre || !famMeta || parseFloat(famMeta) <= 0) return;
+    const meta = parseFloat(famMeta) || 0;
+    const plazo = parseInt(famPlazo) || 0;
+    const aportacion = parseFloat(famAportacion) || 0;
+    if (!famNombre || (meta <= 0 && plazo <= 0 && aportacion <= 0)) return;
+    const metaFinal = meta > 0 ? meta : Math.round(aportacion * plazo * 100) / 100;
+    const plazoFinal = plazo > 0 ? plazo : (aportacion > 0 && meta > 0 ? Math.ceil(meta / aportacion) : 0);
+    const aportacionFinal = aportacion > 0 ? aportacion : (plazoFinal > 0 && metaFinal > 0 ? Math.round((metaFinal / plazoFinal) * 100) / 100 : 0);
     const existente = (catalog.familiares || []).find((f) => f.id === editandoFamId);
     const fam = {
       id: editandoFamId || uid(), activa: true, nombre: famNombre, parentesco: famParentesco,
       categoria: famCategoria, metodo: famMetodo, cuenta: famCuenta,
-      meta: parseFloat(famMeta), plazoMeses: parseInt(famPlazo) || 0,
-      aportacion: parseFloat(famAportacion) || 0,
+      meta: metaFinal, plazoMeses: plazoFinal, aportacion: aportacionFinal, frecuencia: famFrecuencia,
       acumuladoAport: existente ? existente.acumuladoAport : 0,
       acumuladoTDC: existente ? existente.acumuladoTDC : 0,
       ultimoPago: existente ? existente.ultimoPago : ""
@@ -1328,7 +1355,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
     setEditandoFamId(f.id); setFamNombre(f.nombre); setFamParentesco(f.parentesco || "");
     setFamCategoria(f.categoria || ""); setFamMetodo(f.metodo || catalog.metodos[0] || "Efectivo");
     setFamCuenta(f.cuenta || ""); setFamMeta(String(f.meta || "")); setFamPlazo(String(f.plazoMeses || ""));
-    setFamAportacion(String(f.aportacion || ""));
+    setFamAportacion(String(f.aportacion || "")); setFamFrecuencia(f.frecuencia || "Mensual");
   }
 
   function toggleActivaFamiliar(id) {
@@ -1414,15 +1441,43 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                     </select>
                   </Field>
                 )}
-                <Field label="Meta (monto total a ahorrar)">
+                <Field label="Frecuencia de aportación">
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {["Semanal", "Quincenal", "Mensual", "Trimestral"].map((f) => (
+                      <button key={f} onClick={() => setAhoFrecuencia(f)} style={{
+                        padding: "6px 10px", fontSize: 11, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                        border: ahoFrecuencia === f ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                        background: ahoFrecuencia === f ? SHEET.azul : "#fff"
+                      }}>{f}</button>
+                    ))}
+                  </div>
+                </Field>
+                <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "0 0 8px" }}>Llena dos campos — el tercero se calcula solo.</p>
+                <Field label="Meta (total a ahorrar)">
                   <input type="number" inputMode="decimal" value={ahoMeta} onChange={(e) => setAhoMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
-                <Field label="Plazo (meses)">
+                <Field label="Número de parcialidades">
                   <input type="number" inputMode="numeric" value={ahoPlazo} onChange={(e) => setAhoPlazo(e.target.value)} style={inputBase} placeholder="Ej. 12" />
                 </Field>
-                <Field label="Aportación (cuánto metes cada vez)">
+                <Field label="Aportación por parcialidad">
                   <input type="number" inputMode="decimal" value={ahoAportacion} onChange={(e) => setAhoAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
+                {(() => {
+                  const m = parseFloat(ahoMeta) || 0, p = parseInt(ahoPlazo) || 0, a = parseFloat(ahoAportacion) || 0;
+                  const filled = (m > 0 ? 1 : 0) + (p > 0 ? 1 : 0) + (a > 0 ? 1 : 0);
+                  if (filled < 2) return null;
+                  const metaC = m > 0 ? m : Math.round(a * p * 100) / 100;
+                  const plazoC = p > 0 ? p : (a > 0 && m > 0 ? Math.ceil(m / a) : 0);
+                  const aportC = a > 0 ? a : (plazoC > 0 && metaC > 0 ? Math.round((metaC / plazoC) * 100) / 100 : 0);
+                  return (
+                    <div style={{ background: SHEET.amarillo, border: "1px solid #e6d200", borderRadius: 4, padding: "8px 10px", marginBottom: 10, fontSize: 12 }}>
+                      {m <= 0 && <p style={{ margin: "0 0 2px" }}><b>Meta calculada:</b> {fmt(metaC)}</p>}
+                      {p <= 0 && <p style={{ margin: "0 0 2px" }}><b>Parcialidades calculadas:</b> {plazoC}</p>}
+                      {a <= 0 && <p style={{ margin: "0 0 2px" }}><b>Aportación calculada:</b> {fmt(aportC)}</p>}
+                      <p style={{ margin: 0, color: "#555" }}>{ahoFrecuencia} · {plazoC} parcialidades de {fmt(aportC)} = {fmt(metaC)}</p>
+                    </div>
+                  );
+                })()}
                 <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                   <Btn primary full onClick={guardarAhorro}>{editandoAhoId ? "Guardar cambios" : "Agregar ahorro"}</Btn>
                   {editandoAhoId && <Btn full onClick={limpiarFormAhorro}>Cancelar</Btn>}
@@ -1436,7 +1491,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{a.nombre}</p>
                     <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
-                      Meta {fmt(a.meta)} · Aportación {fmt(a.aportacion)} · {a.plazoMeses} meses
+                      Meta {fmt(a.meta)} · {fmt(a.aportacion)}/{a.frecuencia || "Mensual"} · {a.plazoMeses} parcialidades
                     </p>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
@@ -1481,15 +1536,43 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                     </select>
                   </Field>
                 )}
-                <Field label="Meta (monto total a invertir)">
+                <Field label="Frecuencia de aportación">
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {["Semanal", "Quincenal", "Mensual", "Trimestral"].map((f) => (
+                      <button key={f} onClick={() => setInvFrecuencia(f)} style={{
+                        padding: "6px 10px", fontSize: 11, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                        border: invFrecuencia === f ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                        background: invFrecuencia === f ? SHEET.azul : "#fff"
+                      }}>{f}</button>
+                    ))}
+                  </div>
+                </Field>
+                <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "0 0 8px" }}>Llena dos campos — el tercero se calcula solo.</p>
+                <Field label="Meta (total a invertir)">
                   <input type="number" inputMode="decimal" value={invMeta} onChange={(e) => setInvMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
-                <Field label="Plazo (meses)">
+                <Field label="Número de parcialidades">
                   <input type="number" inputMode="numeric" value={invPlazo} onChange={(e) => setInvPlazo(e.target.value)} style={inputBase} placeholder="Ej. 24" />
                 </Field>
-                <Field label="Aportación (cuánto metes cada vez)">
+                <Field label="Aportación por parcialidad">
                   <input type="number" inputMode="decimal" value={invAportacion} onChange={(e) => setInvAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
+                {(() => {
+                  const m = parseFloat(invMeta) || 0, p = parseInt(invPlazo) || 0, a = parseFloat(invAportacion) || 0;
+                  const filled = (m > 0 ? 1 : 0) + (p > 0 ? 1 : 0) + (a > 0 ? 1 : 0);
+                  if (filled < 2) return null;
+                  const metaC = m > 0 ? m : Math.round(a * p * 100) / 100;
+                  const plazoC = p > 0 ? p : (a > 0 && m > 0 ? Math.ceil(m / a) : 0);
+                  const aportC = a > 0 ? a : (plazoC > 0 && metaC > 0 ? Math.round((metaC / plazoC) * 100) / 100 : 0);
+                  return (
+                    <div style={{ background: SHEET.amarillo, border: "1px solid #e6d200", borderRadius: 4, padding: "8px 10px", marginBottom: 10, fontSize: 12 }}>
+                      {m <= 0 && <p style={{ margin: "0 0 2px" }}><b>Meta calculada:</b> {fmt(metaC)}</p>}
+                      {p <= 0 && <p style={{ margin: "0 0 2px" }}><b>Parcialidades calculadas:</b> {plazoC}</p>}
+                      {a <= 0 && <p style={{ margin: "0 0 2px" }}><b>Aportación calculada:</b> {fmt(aportC)}</p>}
+                      <p style={{ margin: 0, color: "#555" }}>{invFrecuencia} · {plazoC} parcialidades de {fmt(aportC)} = {fmt(metaC)}</p>
+                    </div>
+                  );
+                })()}
                 <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                   <Btn primary full onClick={guardarInversion}>{editandoInvId ? "Guardar cambios" : "Agregar inversión"}</Btn>
                   {editandoInvId && <Btn full onClick={limpiarFormInversion}>Cancelar</Btn>}
@@ -1503,7 +1586,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                   <div style={{ minWidth: 0 }}>
                     <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{i.nombre}</p>
                     <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
-                      Meta {fmt(i.meta)} · Aportación {fmt(i.aportacion)} · {i.plazoMeses} meses
+                      Meta {fmt(i.meta)} · {fmt(i.aportacion)}/{i.frecuencia || "Mensual"} · {i.plazoMeses} parcialidades
                     </p>
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
@@ -1723,16 +1806,44 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                     </select>
                   </Field>
                 )}
+                <Field label="Frecuencia de aportación">
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {["Semanal", "Quincenal", "Mensual", "Trimestral"].map((f) => (
+                      <button key={f} onClick={() => setFamFrecuencia(f)} style={{
+                        padding: "6px 10px", fontSize: 11, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                        border: famFrecuencia === f ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                        background: famFrecuencia === f ? SHEET.azul : "#fff"
+                      }}>{f}</button>
+                    ))}
+                  </div>
+                </Field>
+                <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "0 0 8px" }}>Llena dos campos — el tercero se calcula solo.</p>
                 <Field label="Meta de aportación (total a dar)">
                   <input type="number" inputMode="decimal" value={famMeta} onChange={(e) => setFamMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
-                <Field label="Plazo (meses)">
+                <Field label="Número de parcialidades">
                   <input type="number" inputMode="numeric" value={famPlazo} onChange={(e) => setFamPlazo(e.target.value)} style={inputBase} placeholder="Ej. 12" />
                 </Field>
-                <Field label="Aportación mensual">
+                <Field label="Aportación por parcialidad">
                   <input type="number" inputMode="decimal" value={famAportacion} onChange={(e) => setFamAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
-                <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
+                {(() => {
+                  const m = parseFloat(famMeta) || 0, p = parseInt(famPlazo) || 0, a = parseFloat(famAportacion) || 0;
+                  const filled = (m > 0 ? 1 : 0) + (p > 0 ? 1 : 0) + (a > 0 ? 1 : 0);
+                  if (filled < 2) return null;
+                  const metaC = m > 0 ? m : Math.round(a * p * 100) / 100;
+                  const plazoC = p > 0 ? p : (a > 0 && m > 0 ? Math.ceil(m / a) : 0);
+                  const aportC = a > 0 ? a : (plazoC > 0 && metaC > 0 ? Math.round((metaC / plazoC) * 100) / 100 : 0);
+                  return (
+                    <div style={{ background: SHEET.amarillo, border: "1px solid #e6d200", borderRadius: 4, padding: "8px 10px", marginBottom: 10, fontSize: 12 }}>
+                      {m <= 0 && <p style={{ margin: "0 0 2px" }}><b>Meta calculada:</b> {fmt(metaC)}</p>}
+                      {p <= 0 && <p style={{ margin: "0 0 2px" }}><b>Parcialidades calculadas:</b> {plazoC}</p>}
+                      {a <= 0 && <p style={{ margin: "0 0 2px" }}><b>Aportación calculada:</b> {fmt(aportC)}</p>}
+                      <p style={{ margin: 0, color: "#555" }}>{famFrecuencia} · {plazoC} parcialidades de {fmt(aportC)} = {fmt(metaC)}</p>
+                    </div>
+                  );
+                })()}
+                <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "0 0 10px" }}>
                   Pagos a TDC se registran aparte con monto libre cada vez — no necesitan meta fija.
                 </p>
                 <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
