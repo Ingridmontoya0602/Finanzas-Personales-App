@@ -1702,7 +1702,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                 <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid " + SHEET.grisBorde }}>
                   {difActivos.map((dif) => (
                     <div key={dif.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
-                      <span style={{ color: "#444" }}>{dif.nombre} · {dif.numPagos - (dif.pagos || 0)} pagos restantes</span>
+                      <span style={{ color: "#444" }}>{dif.nombre} · {(dif.plazoMeses || 0) - (dif.pagos || 0)} pagos restantes</span>
                       <b style={{ color: SHEET.rosaBorde }}>{fmt(saldoPendienteDiferido(dif))}</b>
                     </div>
                   ))}
