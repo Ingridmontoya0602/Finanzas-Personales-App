@@ -1316,109 +1316,169 @@ function PresupuestoTab({ catalog, movimientos, userEmail }) {
 }
 
 function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
-  const [tdcNombre, setTdcNombre] = useState("");
-  const [tdcLimite, setTdcLimite] = useState("");
-  const [tdcDiasPago, setTdcDiasPago] = useState("20");
-  const [tdcAnualidad, setTdcAnualidad] = useState(false);
-  const [editandoTdcId, setEditandoTdcId] = useState(null);
+  const [editandoId, setEditandoId] = useState(null); // nombre de tarjeta editando
+  const [form, setForm] = useState({});
+  const [nuevoNombre, setNuevoNombre] = useState("");
 
-  function limpiarForm() {
-    setTdcNombre(""); setTdcLimite(""); setTdcDiasPago("20"); setTdcAnualidad(false); setEditandoTdcId(null);
+  // Lista maestra: nombres de cuentas.TDC
+  const nombresTDC = catalog.cuentas.TDC || [];
+  // Detalle por nombre
+  const detalles = catalog.tarjetasTDC || [];
+  function detalleDe(nombre) { return detalles.find((t) => t.nombre === nombre) || null; }
+
+  function abrirEdicion(nombre) {
+    const d = detalleDe(nombre);
+    setEditandoId(nombre);
+    setForm({
+      limite: d ? String(d.limite || "") : "",
+      diasPago: d ? String(d.diasPago || "20") : "20",
+      anualidad: d ? (d.anualidad || false) : false,
+      activa: d ? d.activa !== false : true,
+    });
   }
 
-  function guardarTDC() {
-    if (!tdcNombre || !tdcLimite || parseFloat(tdcLimite) <= 0) return;
+  function guardarDetalle() {
+    const nombre = editandoId;
+    const existente = detalleDe(nombre);
     const tdc = {
-      id: editandoTdcId || uid(), activa: true,
-      nombre: tdcNombre, limite: parseFloat(tdcLimite),
-      diasPago: parseInt(tdcDiasPago) || 20, anualidad: tdcAnualidad
+      id: existente ? existente.id : uid(),
+      nombre, activa: form.activa !== false,
+      limite: parseFloat(form.limite) || 0,
+      diasPago: parseInt(form.diasPago) || 20,
+      anualidad: form.anualidad || false,
     };
-    const lista = catalog.tarjetasTDC || [];
-    const yaExiste = lista.some((t) => t.id === tdc.id);
-    const nuevas = yaExiste ? lista.map((t) => (t.id === tdc.id ? { ...t, ...tdc } : t)) : [tdc, ...lista];
-    // Sincronizar nombre en cuentas.TDC
-    const cuentasTDC = catalog.cuentas.TDC || [];
-    const nuevasCuentas = cuentasTDC.includes(tdcNombre) ? cuentasTDC : [...cuentasTDC, tdcNombre];
-    const actualizado = { ...catalog, tarjetasTDC: nuevas, cuentas: { ...catalog.cuentas, TDC: nuevasCuentas } };
-    setCatalog(actualizado); guardarAhora(actualizado); limpiarForm();
+    const nuevas = existente
+      ? detalles.map((t) => (t.nombre === nombre ? { ...t, ...tdc } : t))
+      : [...detalles, tdc];
+    const actualizado = { ...catalog, tarjetasTDC: nuevas };
+    setCatalog(actualizado); guardarAhora(actualizado); setEditandoId(null);
   }
 
-  function editarTDC(t) {
-    setEditandoTdcId(t.id); setTdcNombre(t.nombre); setTdcLimite(String(t.limite));
-    setTdcDiasPago(String(t.diasPago)); setTdcAnualidad(t.anualidad || false);
-  }
-
-  function toggleActivaTDC(id) {
-    const actualizado = { ...catalog, tarjetasTDC: (catalog.tarjetasTDC || []).map((t) => (t.id === id ? { ...t, activa: !t.activa } : t)) };
+  function agregarNueva() {
+    const nombre = nuevoNombre.trim();
+    if (!nombre || nombresTDC.includes(nombre)) return;
+    const nuevasCuentas = [...nombresTDC, nombre];
+    const actualizado = { ...catalog, cuentas: { ...catalog.cuentas, TDC: nuevasCuentas } };
     setCatalog(actualizado); guardarAhora(actualizado);
+    setNuevoNombre("");
+    // Abrir edición inmediatamente
+    setEditandoId(nombre);
+    setForm({ limite: "", diasPago: "20", anualidad: false, activa: true });
   }
 
-  function eliminarTDC(id) {
-    const actualizado = { ...catalog, tarjetasTDC: (catalog.tarjetasTDC || []).filter((t) => t.id !== id) };
+  function eliminarTarjeta(nombre) {
+    const nuevasCuentas = nombresTDC.filter((n) => n !== nombre);
+    const nuevasDetalles = detalles.filter((t) => t.nombre !== nombre);
+    const actualizado = { ...catalog, cuentas: { ...catalog.cuentas, TDC: nuevasCuentas }, tarjetasTDC: nuevasDetalles };
+    setCatalog(actualizado); guardarAhora(actualizado);
+    if (editandoId === nombre) setEditandoId(null);
+  }
+
+  function toggleActiva(nombre) {
+    const d = detalleDe(nombre);
+    if (!d) return;
+    const nuevas = detalles.map((t) => (t.nombre === nombre ? { ...t, activa: !t.activa } : t));
+    const actualizado = { ...catalog, tarjetasTDC: nuevas };
     setCatalog(actualizado); guardarAhora(actualizado);
   }
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
-      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
-        <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 10px" }}>
-          {editandoTdcId ? "Editar tarjeta" : "Agregar tarjeta de crédito"}
-        </p>
-        <Field label="Nombre de la tarjeta">
-          <input type="text" value={tdcNombre} onChange={(e) => setTdcNombre(e.target.value)} style={inputBase} placeholder="Ej. BBVA Rayados, Banamex, NU" />
-        </Field>
-        <Field label="Límite de crédito">
-          <input type="number" inputMode="decimal" value={tdcLimite} onChange={(e) => setTdcLimite(e.target.value)} style={inputBase} placeholder="$0.00" />
-        </Field>
-        <Field label="Días para pagar después del corte">
-          <input type="number" inputMode="numeric" value={tdcDiasPago} onChange={(e) => setTdcDiasPago(e.target.value)} style={inputBase} placeholder="20" />
-        </Field>
-        <Field label="¿Tiene anualidad?">
-          <div style={{ display: "flex", gap: 8 }}>
-            {[["Sí", true], ["No", false]].map(([label, val]) => (
-              <button key={label} onClick={() => setTdcAnualidad(val)} style={{
-                flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                border: tdcAnualidad === val ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
-                background: tdcAnualidad === val ? SHEET.azul : "#fff"
-              }}>{label}</button>
-            ))}
-          </div>
-        </Field>
-        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-          <Btn primary full onClick={guardarTDC}>{editandoTdcId ? "Guardar cambios" : "Agregar tarjeta"}</Btn>
-          {editandoTdcId && <Btn full onClick={limpiarForm}>Cancelar</Btn>}
-        </div>
-      </div>
+      <p style={{ fontSize: 11.5, color: "#666", fontStyle: "italic", marginBottom: 12 }}>
+        Tus tarjetas de TDC — toca ✎ para agregar límite, días de pago y anualidad.
+      </p>
 
-      <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus tarjetas</p>
-      {(catalog.tarjetasTDC || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin tarjetas aún.</p>}
-      {(catalog.tarjetasTDC || []).map((t) => (
-        <div key={t.id} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 8, background: t.activa ? "#fff" : SHEET.gris }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{t.nombre}</p>
-              <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>
-                Límite {fmt(t.limite)} · {t.diasPago} días para pagar · Anualidad: {t.anualidad ? "Sí" : "No"}
-              </p>
+      {/* Lista de tarjetas existentes */}
+      {nombresTDC.length === 0 && (
+        <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 12 }}>Sin tarjetas aún. Agrega una abajo.</p>
+      )}
+      {nombresTDC.map((nombre) => {
+        const d = detalleDe(nombre);
+        const editando = editandoId === nombre;
+        const tieneDetalle = d && (d.limite > 0 || d.diasPago);
+        return (
+          <div key={nombre} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, marginBottom: 10, overflow: "hidden" }}>
+            {/* Cabecera */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: d && !d.activa ? SHEET.gris : "#fff" }}>
+              <div>
+                <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{nombre}</p>
+                {tieneDetalle ? (
+                  <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>
+                    Límite {fmt(d.limite)} · {d.diasPago} días · Anualidad: {d.anualidad ? "Sí" : "No"}
+                  </p>
+                ) : (
+                  <p style={{ fontSize: 11, color: SHEET.amarilloBorde, fontStyle: "italic", margin: "2px 0 0" }}>⚠ Sin datos — toca ✎ para completar</p>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                {d && (
+                  <button onClick={() => toggleActiva(nombre)} style={{
+                    fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                    border: "1px solid " + SHEET.grisBorde, background: d.activa !== false ? SHEET.verde : "#fff", color: SHEET.texto
+                  }}>{d.activa !== false ? "Activa" : "Inactiva"}</button>
+                )}
+                <button onClick={() => editando ? setEditandoId(null) : abrirEdicion(nombre)} style={{
+                  background: "none", border: "none", cursor: "pointer", fontSize: 14, color: SHEET.azulBorde
+                }}>{editando ? "✕" : "✎"}</button>
+                <button onClick={() => eliminarTarjeta(nombre)} style={{
+                  background: "none", border: "none", cursor: "pointer", fontSize: 14, color: SHEET.rosaBorde
+                }}>🗑</button>
+              </div>
             </div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-              <button onClick={() => toggleActivaTDC(t.id)} style={{
-                fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                border: "1px solid " + SHEET.grisBorde, background: t.activa ? SHEET.verde : "#fff", color: SHEET.texto
-              }}>{t.activa ? "Activa" : "Inactiva"}</button>
-              <button onClick={() => editarTDC(t)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
-              <button onClick={() => eliminarTDC(t.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
-            </div>
+
+            {/* Formulario inline */}
+            {editando && (
+              <div style={{ padding: "10px 12px", background: SHEET.gris, borderTop: "1px solid " + SHEET.grisBorde }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <Field label="Límite de crédito">
+                    <input type="number" inputMode="decimal" value={form.limite || ""} onChange={(e) => setForm((p) => ({ ...p, limite: e.target.value }))}
+                      style={{ ...inputBase, border: `2px solid ${SHEET.rojo}` }} placeholder="$0.00" />
+                  </Field>
+                  <Field label="Días para pagar (post-corte)">
+                    <input type="number" inputMode="numeric" value={form.diasPago || ""} onChange={(e) => setForm((p) => ({ ...p, diasPago: e.target.value }))}
+                      style={{ ...inputBase, border: `2px solid ${SHEET.rojo}` }} placeholder="20" />
+                  </Field>
+                </div>
+                <Field label="¿Tiene anualidad?">
+                  <div style={{ display: "flex", gap: 8 }}>
+                    {[["Sí", true], ["No", false]].map(([label, val]) => (
+                      <button key={label} onClick={() => setForm((p) => ({ ...p, anualidad: val }))} style={{
+                        flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                        border: form.anualidad === val ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                        background: form.anualidad === val ? SHEET.azul : "#fff"
+                      }}>{label}</button>
+                    ))}
+                  </div>
+                </Field>
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <Btn primary full onClick={guardarDetalle}>Guardar</Btn>
+                  <Btn full onClick={() => setEditandoId(null)}>Cancelar</Btn>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
+
+      {/* Agregar nueva tarjeta */}
+      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+        <input type="text" value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && agregarNueva()}
+          placeholder="Nombre de nueva tarjeta..." style={{ ...inputBase, flex: 1, border: `2px solid ${SHEET.grisBorde}` }} />
+        <Btn primary onClick={agregarNueva}>+ Agregar</Btn>
+      </div>
     </div>
   );
 }
 
 function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
   const today = todayISO().slice(0, 7);
-  const tarjetas = (catalog.tarjetasTDC || []).filter((t) => t.activa);
+  const nombresTDC = catalog.cuentas.TDC || [];
+  const detallesTDC = catalog.tarjetasTDC || [];
+  const tarjetas = nombresTDC.map((nombre) => {
+    const d = detallesTDC.find((t) => t.nombre === nombre);
+    return d && d.activa !== false ? { id: nombre, nombre, limite: 0, diasPago: 20, anualidad: false, ...d } : null;
+  }).filter(Boolean);
 
   const mesesDisponibles = useMemo(() => {
     const set = new Set(movimientos.map((m) => m.fecha.slice(0, 7)));
@@ -2184,8 +2244,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
     { id: "ingresos", label: "Ingresos" },
-    { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" },
-    { id: "tdcconfig", label: "Tarjetas" }
+    { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" }
   ];
   const categoriasDelTipo = catalog.categorias[newCatTipo] || [];
   const subcatActual = newSubcatCategoria && categoriasDelTipo.includes(newSubcatCategoria) ? newSubcatCategoria : (categoriasDelTipo[0] || "");
@@ -2209,8 +2268,12 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
               {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
-          <ListEditor title={`Cuentas / tarjetas de ${newCuentaTipo}`} items={catalog.cuentas[newCuentaTipo] || []}
-            onAdd={(v) => addToList(["cuentas", newCuentaTipo], v)} onRemove={(v) => removeFromList(["cuentas", newCuentaTipo], v)} />
+          {newCuentaTipo === "TDC" ? (
+            <TDCConfigEditor catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarAhora} />
+          ) : (
+            <ListEditor title={`Cuentas / tarjetas de ${newCuentaTipo}`} items={catalog.cuentas[newCuentaTipo] || []}
+              onAdd={(v) => addToList(["cuentas", newCuentaTipo], v)} onRemove={(v) => removeFromList(["cuentas", newCuentaTipo], v)} />
+          )}
         </div>
       )}
       {section === "egresos" && (
@@ -2997,9 +3060,6 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
 
       {section === "presupuestos" && (
         <PresupuestoEditor catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarAhora} movimientos={movimientos} />
-      )}
-      {section === "tdcconfig" && (
-        <TDCConfigEditor catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarAhora} />
       )}
     </div>
   );
