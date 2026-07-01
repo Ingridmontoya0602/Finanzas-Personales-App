@@ -3190,35 +3190,33 @@ function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferi
     const interesesPagados = d.interesesPagados || 0;
     const totalRealPagado = Math.round((d.pagado + interesesPagados) * 100) / 100;
     return (
-      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: d.activo ? "#fff" : SHEET.gris }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "7px 10px", marginBottom: 6, background: d.activo ? "#fff" : SHEET.gris }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
           <div style={{ minWidth: 0 }}>
             <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>
               {d.nombre ? d.nombre : `${d.categoria}${d.subcategoria ? ` · ${d.subcategoria}` : ""}`}
             </p>
             {d.nombre && <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{d.categoria}{d.subcategoria ? ` · ${d.subcategoria}` : ""}</p>}
-            {d.descripcion && <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "1px 0 0" }}>{d.descripcion}</p>}
-            <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>{d.tarjeta} · desde {fmtDate(d.inicio)}</p>
+            {d.descripcion && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "1px 0 0" }}>{d.descripcion}</p>}
+            <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{d.tarjeta} · desde {fmtDate(d.inicio)}</p>
           </div>
-          <button aria-label="Eliminar" onClick={() => eliminarDiferido(d.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, padding: 2, flexShrink: 0 }}>✕</button>
-          <button aria-label="Editar" onClick={() => editandoId === d.id ? setEditandoId(null) : abrirEdicion(d)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.azulBorde, padding: 2, flexShrink: 0, fontSize: 14 }}>✎</button>
+          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+            <button aria-label="Editar" onClick={() => editandoId === d.id ? setEditandoId(null) : abrirEdicion(d)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.azulBorde, padding: 2, fontSize: 14 }}>✎</button>
+            <button aria-label="Eliminar" onClick={() => eliminarDiferido(d.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, padding: 2 }}>✕</button>
+          </div>
         </div>
 
-        {/* Capital */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
-          <div><span style={{ color: "#777" }}>Capital total</span><br /><b>{fmt(d.costoTotal)}</b></div>
-          <div><span style={{ color: "#777" }}>Capital pagado</span><br /><b>{fmt(d.pagado)}</b></div>
-          <div><span style={{ color: "#777" }}>Capital pendiente</span><br /><b style={{ color: capitalPendiente > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(capitalPendiente)}</b></div>
+        {/* Datos en una sola fila compacta */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, marginTop: 6, fontSize: 11 }}>
+          <div><span style={{ color: "#777" }}>Capital</span><br /><b>{fmt(d.costoTotal)}</b></div>
+          <div><span style={{ color: "#777" }}>Pagado</span><br /><b>{fmt(d.pagado)}</b></div>
+          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b style={{ color: capitalPendiente > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(capitalPendiente)}</b></div>
+          <div><span style={{ color: "#777" }}>Intereses</span><br /><b style={{ color: interesesPagados > 0 ? SHEET.rosaBorde : "#555" }}>{fmt(interesesPagados)}</b></div>
+          <div><span style={{ color: "#777" }}>Total real</span><br /><b>{fmt(totalRealPagado)}</b></div>
         </div>
 
-        {/* Intereses */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6, fontSize: 11.5 }}>
-          <div><span style={{ color: "#777" }}>Intereses pagados</span><br /><b style={{ color: interesesPagados > 0 ? SHEET.rosaBorde : "#555" }}>{fmt(interesesPagados)}</b></div>
-          <div><span style={{ color: "#777" }}>Total real pagado</span><br /><b>{fmt(totalRealPagado)}</b></div>
-        </div>
-
-        <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic" }}>
-          Pago {d.pagos} / {d.plazoMeses} · Mensualidad {fmt(d.aportacion)}{d.ultPago ? ` · Últ. pago ${fmtDate(d.ultPago)}` : ""}
+        <p style={{ fontSize: 11, margin: "4px 0 0", fontStyle: "italic", color: "#555" }}>
+          Pago {d.pagos}/{d.plazoMeses} · {fmt(d.aportacion)}/mes{d.ultPago ? ` · Últ. ${fmtDate(d.ultPago)}` : ""}
         </p>
 
         {editandoId === d.id && (
