@@ -3135,6 +3135,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
 function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail }) {
   const [pagandoId, setPagandoId] = useState(null);
   const [montoPago, setMontoPago] = useState("");
+  const [interesesPago, setInteresesPago] = useState("");
   const [fechaPago, setFechaPago] = useState(todayISO());
 
   const activos = diferidos.filter((d) => d.activo);
@@ -3143,18 +3144,22 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
   function abrirPago(d) {
     setPagandoId(d.id);
     setMontoPago(String(d.aportacion));
+    setInteresesPago("");
     setFechaPago(todayISO());
   }
 
   async function confirmarPago() {
     const monto = parseFloat(montoPago);
+    const intereses = parseFloat(interesesPago) || 0;
     if (!monto || monto <= 0 || !fechaPago) return;
-    await registrarPago(pagandoId, monto, fechaPago);
+    await registrarPago(pagandoId, monto, fechaPago, intereses);
     setPagandoId(null);
   }
 
   function Tarjeta({ d }) {
-    const pendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+    const capitalPendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+    const interesesPagados = d.interesesPagados || 0;
+    const totalRealPagado = Math.round((d.pagado + interesesPagados) * 100) / 100;
     return (
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: d.activo ? "#fff" : SHEET.gris }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -3168,20 +3173,38 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
           </div>
           <button aria-label="Eliminar" onClick={() => eliminarDiferido(d.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, padding: 2, flexShrink: 0 }}>✕</button>
         </div>
+
+        {/* Capital */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
-          <div><span style={{ color: "#777" }}>Total</span><br /><b>{fmt(d.costoTotal)}</b></div>
-          <div><span style={{ color: "#777" }}>Pagado</span><br /><b>{fmt(d.pagado)}</b></div>
-          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b>{fmt(pendiente)}</b></div>
+          <div><span style={{ color: "#777" }}>Capital total</span><br /><b>{fmt(d.costoTotal)}</b></div>
+          <div><span style={{ color: "#777" }}>Capital pagado</span><br /><b>{fmt(d.pagado)}</b></div>
+          <div><span style={{ color: "#777" }}>Capital pendiente</span><br /><b style={{ color: capitalPendiente > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(capitalPendiente)}</b></div>
         </div>
+
+        {/* Intereses */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 6, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Intereses pagados</span><br /><b style={{ color: interesesPagados > 0 ? SHEET.rosaBorde : "#555" }}>{fmt(interesesPagados)}</b></div>
+          <div><span style={{ color: "#777" }}>Total real pagado</span><br /><b>{fmt(totalRealPagado)}</b></div>
+        </div>
+
         <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic" }}>
           Pago {d.pagos} / {d.plazoMeses} · Mensualidad {fmt(d.aportacion)}{d.ultPago ? ` · Últ. pago ${fmtDate(d.ultPago)}` : ""}
         </p>
+
         {d.activo && (
           pagandoId === d.id ? (
             <div style={{ marginTop: 8, padding: "8px", background: SHEET.gris, borderRadius: 3 }}>
-              <Field label="Monto del pago">
+              <Field label="Monto del pago (capital)">
                 <input type="number" inputMode="decimal" value={montoPago} onChange={(e) => setMontoPago(e.target.value)} style={inputBase} />
               </Field>
+              <Field label="Intereses cobrados este periodo (opcional)">
+                <input type="number" inputMode="decimal" value={interesesPago} onChange={(e) => setInteresesPago(e.target.value)} style={inputBase} placeholder="$0.00 — ver estado de cuenta" />
+              </Field>
+              {interesesPago && parseFloat(interesesPago) > 0 && (
+                <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "-6px 0 8px" }}>
+                  Se registrarán como "Intereses TDC" en tu historial. Total este periodo: {fmt(Math.round(((parseFloat(montoPago) || 0) + parseFloat(interesesPago)) * 100) / 100)}
+                </p>
+              )}
               <Field label="Fecha de pago">
                 <div style={{ width: "100%", overflow: "hidden", borderRadius: 2 }}>
                   <input type="date" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)}
@@ -3202,20 +3225,24 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
   }
 
   function exportarCSV() {
-    const headers = ["Activo/Inactivo", "Nombre", "Categoría", "Subcategoría", "Tarjeta", "Costo Total", "Plazo (meses)", "Aportación", "#Pago", "Pagado", "Pendiente", "Últ. Pago", "Inicio", "Notas"];
+    const headers = ["Activo/Inactivo", "Nombre", "Categoría", "Subcategoría", "Tarjeta", "Capital Total", "Plazo (meses)", "Mensualidad", "#Pago", "Capital Pagado", "Capital Pendiente", "Intereses Pagados", "Total Real Pagado", "Últ. Pago", "Inicio", "Notas"];
     const filas = diferidos.map((d) => {
-      const pendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+      const capitalPendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+      const interesesPagados = d.interesesPagados || 0;
+      const totalRealPagado = Math.round((d.pagado + interesesPagados) * 100) / 100;
       return [
         d.activo ? "Activo" : "Inactivo", d.nombre || "", d.categoria || "", d.subcategoria || "", d.tarjeta || "",
-        d.costoTotal, d.plazoMeses, d.aportacion, `${d.pagos}/${d.plazoMeses}`, d.pagado, pendiente,
+        d.costoTotal, d.plazoMeses, d.aportacion, `${d.pagos}/${d.plazoMeses}`,
+        d.pagado, capitalPendiente, interesesPagados, totalRealPagado,
         d.ultPago ? fmtDate(d.ultPago) : "", d.inicio ? fmtDate(d.inicio) : "", d.descripcion || ""
       ];
     });
     const totalCosto = diferidos.reduce((s, d) => s + d.costoTotal, 0);
-    const totalAportacion = diferidos.reduce((s, d) => s + d.aportacion, 0);
     const totalPagado = diferidos.reduce((s, d) => s + d.pagado, 0);
     const totalPendiente = diferidos.reduce((s, d) => s + Math.round((d.costoTotal - d.pagado) * 100) / 100, 0);
-    const filaTotal = ["", "Total", "", "", "", totalCosto, "", totalAportacion, "", totalPagado, totalPendiente, "", "", ""];
+    const totalIntereses = diferidos.reduce((s, d) => s + (d.interesesPagados || 0), 0);
+    const totalReal = Math.round((totalPagado + totalIntereses) * 100) / 100;
+    const filaTotal = ["", "Total", "", "", "", totalCosto, "", "", "", totalPagado, totalPendiente, totalIntereses, totalReal, "", "", ""];
     const escape = (v) => {
       const s = String(v ?? "");
       return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
@@ -3232,7 +3259,9 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
 
   function exportarPDF() {
     const filas = diferidos.map((d) => {
-      const pendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+      const capitalPendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+      const interesesPagados = d.interesesPagados || 0;
+      const totalRealPagado = Math.round((d.pagado + interesesPagados) * 100) / 100;
       return `<tr>
         <td>${d.activo ? "Activo" : "Inactivo"}</td>
         <td>${d.nombre || "-"}</td>
@@ -3243,32 +3272,34 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
         <td class="num">${fmt(d.aportacion)}</td>
         <td class="num">${d.pagos}/${d.plazoMeses}</td>
         <td class="num">${fmt(d.pagado)}</td>
-        <td class="num">${fmt(pendiente)}</td>
+        <td class="num">${fmt(capitalPendiente)}</td>
+        <td class="num" style="color:#c62828">${fmt(interesesPagados)}</td>
+        <td class="num">${fmt(totalRealPagado)}</td>
         <td>${d.ultPago ? fmtDate(d.ultPago) : "-"}</td>
-        <td>${d.inicio ? fmtDate(d.inicio) : "-"}</td>
       </tr>`;
     }).join("");
     const totalCosto = diferidos.reduce((s, d) => s + d.costoTotal, 0);
-    const totalAportacion = diferidos.reduce((s, d) => s + d.aportacion, 0);
     const totalPagado = diferidos.reduce((s, d) => s + d.pagado, 0);
     const totalPendiente = diferidos.reduce((s, d) => s + Math.round((d.costoTotal - d.pagado) * 100) / 100, 0);
+    const totalIntereses = diferidos.reduce((s, d) => s + (d.interesesPagados || 0), 0);
+    const totalReal = Math.round((totalPagado + totalIntereses) * 100) / 100;
     const filaTotal = `<tr class="total">
         <td colspan="4">Total</td>
         <td class="num">${fmt(totalCosto)}</td>
-        <td></td>
-        <td class="num">${fmt(totalAportacion)}</td>
-        <td></td>
+        <td></td><td></td><td></td>
         <td class="num">${fmt(totalPagado)}</td>
         <td class="num">${fmt(totalPendiente)}</td>
-        <td></td><td></td>
+        <td class="num" style="color:#c62828">${fmt(totalIntereses)}</td>
+        <td class="num">${fmt(totalReal)}</td>
+        <td></td>
       </tr>`;
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Pagos Diferidos TDC</title>
       <style>
         body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
         h1 { font-size: 20px; margin: 0 0 4px; }
         p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 14px; }
-        th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 14px; }
+        th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; }
         th { background: #F4CCCC; font-weight: 700; }
         td.num, th.num { text-align: right; }
         tr.total td { font-weight: 700; background: #FFF2CC; }
@@ -3281,9 +3312,9 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
         <table>
           <thead><tr>
             <th>Estatus</th><th>Nombre</th><th>Categoría</th><th>Tarjeta</th>
-            <th class="num">Costo Total</th><th class="num">Plazo</th><th class="num">Aportación</th>
-            <th class="num">#Pago</th><th class="num">Pagado</th><th class="num">Pendiente</th>
-            <th>Últ. Pago</th><th>Inicio</th>
+            <th class="num">Capital</th><th class="num">Plazo</th><th class="num">Mensualidad</th><th class="num">Pagos</th>
+            <th class="num">Cap. Pagado</th><th class="num">Cap. Pendiente</th>
+            <th class="num">Intereses</th><th class="num">Total Real</th><th>Últ. Pago</th>
           </tr></thead>
           <tbody>${filas}${filaTotal}</tbody>
         </table>
@@ -4708,7 +4739,7 @@ export default function App() {
     guardarCatalogoAhora(actualizado);
   }
 
-  async function registrarPagoDiferido(diferidoId, monto, fecha) {
+  async function registrarPagoDiferido(diferidoId, monto, fecha, intereses = 0) {
     const dif = (catalogRef.current.diferidos || []).find((d) => d.id === diferidoId);
     if (!dif) return;
     const etiqueta = dif.nombre || `${dif.categoria}${dif.subcategoria ? " · " + dif.subcategoria : ""}`;
@@ -4718,13 +4749,23 @@ export default function App() {
       descripcion: `Diferido: ${etiqueta}${dif.descripcion ? " · " + dif.descripcion : ""}`,
       lugar: `__diferido:${diferidoId}`, fecha, cantidad: monto
     });
+    // Si hay intereses, registrarlos también como movimiento separado
+    if (intereses > 0) {
+      await addMovimiento({
+        mov: "Egreso", metodo: "TDC", cuenta: dif.tarjeta,
+        tipo: "G. Variable", categoria: "Intereses TDC", subcategoria: etiqueta,
+        descripcion: `Intereses diferido: ${etiqueta}`,
+        lugar: "", fecha, cantidad: intereses
+      });
+    }
     const actualizado = {
       ...catalogRef.current,
       diferidos: (catalogRef.current.diferidos || []).map((d) => {
         if (d.id !== diferidoId) return d;
         const pagosNuevos = d.pagos + 1;
         const pagadoNuevo = Math.round((d.pagado + monto) * 100) / 100;
-        return { ...d, pagos: pagosNuevos, pagado: pagadoNuevo, ultPago: fecha, activo: pagosNuevos < d.plazoMeses };
+        const interesesPagados = Math.round(((d.interesesPagados || 0) + intereses) * 100) / 100;
+        return { ...d, pagos: pagosNuevos, pagado: pagadoNuevo, interesesPagados, ultPago: fecha, activo: pagosNuevos < d.plazoMeses };
       })
     };
     setCatalog(actualizado);
