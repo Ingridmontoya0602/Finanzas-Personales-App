@@ -72,6 +72,8 @@ const DEFAULT_CATALOG = {
     "Otro(a)": ["Otro(a)"]
   },
   presupuestosMensuales: {},
+  tarjetasTDC: [],
+  ciclosTDC: {},
   membresias: [],
   seguros: [],
   servicios: [],
@@ -242,6 +244,7 @@ function TabBar({ tab, setTab, onLogout }) {
   ];
   const menuItems = [
     { id: "diferidos", label: "Diferidos TDC" },
+    { id: "tdc", label: "Tarjetas de Crédito" },
     { id: "membresias", label: "Membresías" },
     { id: "servicios", label: "Servicios" },
     { id: "seguros", label: "Seguros" },
@@ -1312,6 +1315,367 @@ function PresupuestoTab({ catalog, movimientos, userEmail }) {
   );
 }
 
+function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
+  const [tdcNombre, setTdcNombre] = useState("");
+  const [tdcLimite, setTdcLimite] = useState("");
+  const [tdcDiasPago, setTdcDiasPago] = useState("20");
+  const [tdcAnualidad, setTdcAnualidad] = useState(false);
+  const [editandoTdcId, setEditandoTdcId] = useState(null);
+
+  function limpiarForm() {
+    setTdcNombre(""); setTdcLimite(""); setTdcDiasPago("20"); setTdcAnualidad(false); setEditandoTdcId(null);
+  }
+
+  function guardarTDC() {
+    if (!tdcNombre || !tdcLimite || parseFloat(tdcLimite) <= 0) return;
+    const tdc = {
+      id: editandoTdcId || uid(), activa: true,
+      nombre: tdcNombre, limite: parseFloat(tdcLimite),
+      diasPago: parseInt(tdcDiasPago) || 20, anualidad: tdcAnualidad
+    };
+    const lista = catalog.tarjetasTDC || [];
+    const yaExiste = lista.some((t) => t.id === tdc.id);
+    const nuevas = yaExiste ? lista.map((t) => (t.id === tdc.id ? { ...t, ...tdc } : t)) : [tdc, ...lista];
+    // Sincronizar nombre en cuentas.TDC
+    const cuentasTDC = catalog.cuentas.TDC || [];
+    const nuevasCuentas = cuentasTDC.includes(tdcNombre) ? cuentasTDC : [...cuentasTDC, tdcNombre];
+    const actualizado = { ...catalog, tarjetasTDC: nuevas, cuentas: { ...catalog.cuentas, TDC: nuevasCuentas } };
+    setCatalog(actualizado); guardarAhora(actualizado); limpiarForm();
+  }
+
+  function editarTDC(t) {
+    setEditandoTdcId(t.id); setTdcNombre(t.nombre); setTdcLimite(String(t.limite));
+    setTdcDiasPago(String(t.diasPago)); setTdcAnualidad(t.anualidad || false);
+  }
+
+  function toggleActivaTDC(id) {
+    const actualizado = { ...catalog, tarjetasTDC: (catalog.tarjetasTDC || []).map((t) => (t.id === id ? { ...t, activa: !t.activa } : t)) };
+    setCatalog(actualizado); guardarAhora(actualizado);
+  }
+
+  function eliminarTDC(id) {
+    const actualizado = { ...catalog, tarjetasTDC: (catalog.tarjetasTDC || []).filter((t) => t.id !== id) };
+    setCatalog(actualizado); guardarAhora(actualizado);
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 14 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 10px" }}>
+          {editandoTdcId ? "Editar tarjeta" : "Agregar tarjeta de crédito"}
+        </p>
+        <Field label="Nombre de la tarjeta">
+          <input type="text" value={tdcNombre} onChange={(e) => setTdcNombre(e.target.value)} style={inputBase} placeholder="Ej. BBVA Rayados, Banamex, NU" />
+        </Field>
+        <Field label="Límite de crédito">
+          <input type="number" inputMode="decimal" value={tdcLimite} onChange={(e) => setTdcLimite(e.target.value)} style={inputBase} placeholder="$0.00" />
+        </Field>
+        <Field label="Días para pagar después del corte">
+          <input type="number" inputMode="numeric" value={tdcDiasPago} onChange={(e) => setTdcDiasPago(e.target.value)} style={inputBase} placeholder="20" />
+        </Field>
+        <Field label="¿Tiene anualidad?">
+          <div style={{ display: "flex", gap: 8 }}>
+            {[["Sí", true], ["No", false]].map(([label, val]) => (
+              <button key={label} onClick={() => setTdcAnualidad(val)} style={{
+                flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                border: tdcAnualidad === val ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                background: tdcAnualidad === val ? SHEET.azul : "#fff"
+              }}>{label}</button>
+            ))}
+          </div>
+        </Field>
+        <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+          <Btn primary full onClick={guardarTDC}>{editandoTdcId ? "Guardar cambios" : "Agregar tarjeta"}</Btn>
+          {editandoTdcId && <Btn full onClick={limpiarForm}>Cancelar</Btn>}
+        </div>
+      </div>
+
+      <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus tarjetas</p>
+      {(catalog.tarjetasTDC || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin tarjetas aún.</p>}
+      {(catalog.tarjetasTDC || []).map((t) => (
+        <div key={t.id} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 8, background: t.activa ? "#fff" : SHEET.gris }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{t.nombre}</p>
+              <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>
+                Límite {fmt(t.limite)} · {t.diasPago} días para pagar · Anualidad: {t.anualidad ? "Sí" : "No"}
+              </p>
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+              <button onClick={() => toggleActivaTDC(t.id)} style={{
+                fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                border: "1px solid " + SHEET.grisBorde, background: t.activa ? SHEET.verde : "#fff", color: SHEET.texto
+              }}>{t.activa ? "Activa" : "Inactiva"}</button>
+              <button onClick={() => editarTDC(t)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
+              <button onClick={() => eliminarTDC(t.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
+  const today = todayISO().slice(0, 7);
+  const tarjetas = (catalog.tarjetasTDC || []).filter((t) => t.activa);
+
+  const mesesDisponibles = useMemo(() => {
+    const set = new Set(movimientos.map((m) => m.fecha.slice(0, 7)));
+    set.add(today);
+    return Array.from(set).sort().reverse();
+  }, [movimientos, today]);
+
+  const [mesActual, setMesActual] = useState(today);
+  const [editandoCicloId, setEditandoCicloId] = useState(null); // tdcId que se está editando
+  const [formCiclo, setFormCiclo] = useState({});
+
+  const ciclosTDC = catalog.ciclosTDC || {};
+  const ciclosMes = ciclosTDC[mesActual] || {};
+
+  function abrirFormCiclo(tdc) {
+    const ciclo = ciclosMes[tdc.id] || {};
+    // Calcular fecha de inicio sugerida (mes anterior mismo día)
+    const [y, m] = mesActual.split("-").map(Number);
+    const finCicloSugerido = `${mesActual}-${String(tdc.diasPago > 0 ? tdc.diasPago : 8).padStart(2, "0")}`;
+    setFormCiclo({
+      inicioCiclo: ciclo.inicioCiclo || "",
+      finCiclo: ciclo.finCiclo || "",
+      fechaPago: ciclo.fechaPago || "",
+      pagoMinimo: ciclo.pagoMinimo || "",
+      intereses: ciclo.intereses || "",
+      adelanto: ciclo.adelanto || "",
+      reembolso: ciclo.reembolso || "",
+      pagado: ciclo.pagado || "",
+    });
+    setEditandoCicloId(tdc.id);
+  }
+
+  function guardarCiclo() {
+    const nuevos = {
+      ...ciclosTDC,
+      [mesActual]: {
+        ...ciclosMes,
+        [editandoCicloId]: {
+          inicioCiclo: formCiclo.inicioCiclo,
+          finCiclo: formCiclo.finCiclo,
+          fechaPago: formCiclo.fechaPago,
+          pagoMinimo: parseFloat(formCiclo.pagoMinimo) || 0,
+          intereses: parseFloat(formCiclo.intereses) || 0,
+          adelanto: parseFloat(formCiclo.adelanto) || 0,
+          reembolso: parseFloat(formCiclo.reembolso) || 0,
+          pagado: parseFloat(formCiclo.pagado) || 0,
+        }
+      }
+    };
+    const actualizado = { ...catalog, ciclosTDC: nuevos };
+    setCatalog(actualizado); guardarAhora(actualizado); setEditandoCicloId(null);
+  }
+
+  function calcularGastoCiclo(tdcId, tarjetaNombre, inicioCiclo, finCiclo) {
+    if (!inicioCiclo || !finCiclo) return { gasto: 0, diferidos: 0, regulares: 0 };
+    const movsCiclo = movimientos.filter((m) =>
+      m.mov === "Egreso" && m.cuenta === tarjetaNombre &&
+      m.fecha >= inicioCiclo && m.fecha <= finCiclo
+    );
+    const diferidos = movsCiclo.filter((m) => m.tipo === "Pago TDC" || (m.lugar && m.lugar.startsWith("__diferido:"))).reduce((s, m) => s + Number(m.cantidad), 0);
+    const gasto = movsCiclo.reduce((s, m) => s + Number(m.cantidad), 0);
+    const regulares = gasto - diferidos;
+    return { gasto, diferidos, regulares };
+  }
+
+  function calcularPagoSinIntereses(gasto, intereses, adelanto, reembolso) {
+    return Math.max(0, gasto + (intereses || 0) + (adelanto || 0) - (reembolso || 0));
+  }
+
+  function exportarCSV() {
+    const escape = (v) => { const s = String(v ?? ""); return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const headers = ["Tarjeta", "Inicio Ciclo", "Fin Ciclo", "Fecha Pago", "Intereses", "Pago Mín.", "Gasto Ciclo", "Diferidos", "Regulares", "Adelanto", "Pago Sin Int.", "Reembolso", "Pagado", "Restante"];
+    const filas = tarjetas.map((t) => {
+      const ciclo = ciclosMes[t.id] || {};
+      const { gasto, diferidos, regulares } = calcularGastoCiclo(t.id, t.nombre, ciclo.inicioCiclo, ciclo.finCiclo);
+      const pagoSinInt = calcularPagoSinIntereses(gasto, ciclo.intereses, ciclo.adelanto, ciclo.reembolso);
+      const restante = pagoSinInt - (ciclo.pagado || 0);
+      return [t.nombre, ciclo.inicioCiclo || "", ciclo.finCiclo || "", ciclo.fechaPago || "",
+        ciclo.intereses || 0, ciclo.pagoMinimo || 0, gasto, diferidos, regulares,
+        ciclo.adelanto || 0, pagoSinInt, ciclo.reembolso || 0, ciclo.pagado || 0, restante];
+    });
+    const totGasto = tarjetas.reduce((s, t) => { const c = ciclosMes[t.id] || {}; return s + calcularGastoCiclo(t.id, t.nombre, c.inicioCiclo, c.finCiclo).gasto; }, 0);
+    const totPagado = tarjetas.reduce((s, t) => s + ((ciclosMes[t.id] || {}).pagado || 0), 0);
+    const encabezado = [["Tarjetas de Crédito"], [`Mes: ${mesLabel(mesActual)}`], [`Usuario: ${userEmail || ""}`], [`Generado: ${fmtDate(todayISO())}`], []];
+    const csv = [...encabezado, headers, ...filas, ["", "", "", "", "", "TOTAL", totGasto, "", "", "", "", "", totPagado, ""]].map((r) => r.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `TDC_${mesActual}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const filas = tarjetas.map((t) => {
+      const ciclo = ciclosMes[t.id] || {};
+      const { gasto, diferidos, regulares } = calcularGastoCiclo(t.id, t.nombre, ciclo.inicioCiclo, ciclo.finCiclo);
+      const pagoSinInt = calcularPagoSinIntereses(gasto, ciclo.intereses, ciclo.adelanto, ciclo.reembolso);
+      const restante = pagoSinInt - (ciclo.pagado || 0);
+      return `<tr>
+        <td>${t.nombre}</td><td>${ciclo.inicioCiclo || "—"}</td><td>${ciclo.finCiclo || "—"}</td><td>${ciclo.fechaPago || "—"}</td>
+        <td class="num">${fmt(ciclo.intereses || 0)}</td><td class="num">${fmt(ciclo.pagoMinimo || 0)}</td>
+        <td class="num">${fmt(gasto)}</td><td class="num">${fmt(diferidos)}</td><td class="num">${fmt(regulares)}</td>
+        <td class="num">${fmt(ciclo.adelanto || 0)}</td><td class="num">${fmt(pagoSinInt)}</td>
+        <td class="num">${fmt(ciclo.reembolso || 0)}</td><td class="num">${fmt(ciclo.pagado || 0)}</td>
+        <td class="num" style="color:${restante > 0 ? "#c62828" : "#2e7d32"}">${fmt(restante)}</td>
+      </tr>`;
+    }).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TDC ${mesLabel(mesActual)}</title>
+      <style>body{font-family:Calibri,Arial,sans-serif;padding:24px}h1{font-size:18px;margin:0 0 4px}p.sub{font-size:11px;color:#555;margin:0 0 4px}
+      table{width:100%;border-collapse:collapse;font-size:8px;margin-top:12px}th,td{border:1px solid #999;padding:3px 4px}
+      th{background:#F4CCCC;font-weight:700;text-align:left}td.num{text-align:right}@media print{body{padding:0}}</style></head>
+      <body><h1>Tarjetas de Crédito — ${mesLabel(mesActual)}</h1>
+      <p class="sub">Usuario: ${userEmail || ""} · Generado el ${fmtDate(todayISO())}</p>
+      <table><thead><tr><th>Tarjeta</th><th>Inicio</th><th>Corte</th><th>F.Pago</th>
+        <th class="num">Intereses</th><th class="num">Pago Mín.</th><th class="num">Gasto</th>
+        <th class="num">Diferidos</th><th class="num">Regulares</th><th class="num">Adelanto</th>
+        <th class="num">Pago S/Int.</th><th class="num">Reembolso</th><th class="num">Pagado</th><th class="num">Restante</th>
+      </tr></thead><tbody>${filas}</tbody></table>
+      <script>window.onload=()=>{window.print();}</script></body></html>`;
+    const v = window.open("", "_blank"); if (v) { v.document.write(html); v.document.close(); }
+  }
+
+  const inputSmall = { ...inputBase, fontSize: 12, padding: "5px 6px" };
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      {/* Selector de mes */}
+      <Field label="Mes">
+        <select value={mesActual} onChange={(e) => { setMesActual(e.target.value); setEditandoCicloId(null); }} style={{ ...inputBase, background: SHEET.azul }}>
+          {mesesDisponibles.map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+        </select>
+      </Field>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Excel</Btn>
+      </div>
+
+      {tarjetas.length === 0 && (
+        <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin tarjetas activas. Agrégalas desde Datos → Tarjetas.</p>
+      )}
+
+      {tarjetas.map((t) => {
+        const ciclo = ciclosMes[t.id] || {};
+        const { gasto, diferidos, regulares } = calcularGastoCiclo(t.id, t.nombre, ciclo.inicioCiclo, ciclo.finCiclo);
+        const pagoSinInt = calcularPagoSinIntereses(gasto, ciclo.intereses, ciclo.adelanto, ciclo.reembolso);
+        const restante = pagoSinInt - (ciclo.pagado || 0);
+        const editando = editandoCicloId === t.id;
+
+        return (
+          <div key={t.id} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
+            {/* Header tarjeta */}
+            <div style={{ background: SHEET.rosa, padding: "8px 12px", borderBottom: "1px solid " + SHEET.rosaBorde, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <p style={{ fontSize: 14, fontWeight: 700, fontStyle: "italic", margin: 0 }}>{t.nombre}</p>
+                <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>Límite {fmt(t.limite)} · {t.diasPago} días para pagar{t.anualidad ? " · Con anualidad" : ""}</p>
+              </div>
+              <button onClick={() => editando ? setEditandoCicloId(null) : abrirFormCiclo(t)} style={{
+                fontSize: 11, fontWeight: 700, fontStyle: "italic", padding: "5px 10px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                border: `1px solid ${SHEET.rosaBorde}`, background: editando ? SHEET.rosa : "#fff"
+              }}>{editando ? "Cancelar" : "✎ Editar ciclo"}</button>
+            </div>
+
+            {/* Formulario de ciclo (edición) */}
+            {editando && (
+              <div style={{ background: SHEET.gris, padding: "10px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <Field label="Inicio de ciclo">
+                    <input type="date" value={formCiclo.inicioCiclo || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, inicioCiclo: e.target.value }))} style={inputSmall} />
+                  </Field>
+                  <Field label="Fin de ciclo / Corte">
+                    <input type="date" value={formCiclo.finCiclo || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, finCiclo: e.target.value }))} style={inputSmall} />
+                  </Field>
+                  <Field label="Fecha límite de pago">
+                    <input type="date" value={formCiclo.fechaPago || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, fechaPago: e.target.value }))} style={inputSmall} />
+                  </Field>
+                  <Field label="Pago mínimo">
+                    <input type="number" inputMode="decimal" value={formCiclo.pagoMinimo || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, pagoMinimo: e.target.value }))} style={inputSmall} placeholder="$0" />
+                  </Field>
+                  <Field label="Intereses cobrados">
+                    <input type="number" inputMode="decimal" value={formCiclo.intereses || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, intereses: e.target.value }))} style={inputSmall} placeholder="$0" />
+                  </Field>
+                  <Field label="Adelanto">
+                    <input type="number" inputMode="decimal" value={formCiclo.adelanto || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, adelanto: e.target.value }))} style={inputSmall} placeholder="$0" />
+                  </Field>
+                  <Field label="Reembolso">
+                    <input type="number" inputMode="decimal" value={formCiclo.reembolso || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, reembolso: e.target.value }))} style={inputSmall} placeholder="$0" />
+                  </Field>
+                  <Field label="Pagado">
+                    <input type="number" inputMode="decimal" value={formCiclo.pagado || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, pagado: e.target.value }))} style={inputSmall} placeholder="$0" />
+                  </Field>
+                </div>
+                <Btn primary full onClick={guardarCiclo} style={{ marginTop: 8 }}>Guardar ciclo</Btn>
+              </div>
+            )}
+
+            {/* Resumen del ciclo */}
+            <div style={{ padding: "10px 12px", background: "#fff" }}>
+              {ciclo.inicioCiclo ? (
+                <>
+                  <p style={{ fontSize: 11, color: "#666", fontStyle: "italic", margin: "0 0 8px" }}>
+                    Ciclo: {ciclo.inicioCiclo} al {ciclo.finCiclo} · Pagar antes del {ciclo.fechaPago || "—"}
+                  </p>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5, marginBottom: 8 }}>
+                    <div><span style={{ color: "#777" }}>Gasto ciclo</span><br /><b>{fmt(gasto)}</b></div>
+                    <div><span style={{ color: "#777" }}>Diferidos</span><br /><b>{fmt(diferidos)}</b></div>
+                    <div><span style={{ color: "#777" }}>Regulares</span><br /><b>{fmt(regulares)}</b></div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5 }}>
+                    <div><span style={{ color: "#777" }}>Pago sin int.</span><br /><b>{fmt(pagoSinInt)}</b></div>
+                    <div><span style={{ color: "#777" }}>Pagado</span><br /><b style={{ color: SHEET.verdeBorde }}>{fmt(ciclo.pagado || 0)}</b></div>
+                    <div><span style={{ color: "#777" }}>Restante</span><br /><b style={{ color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(restante)}</b></div>
+                  </div>
+                  {(ciclo.intereses || 0) > 0 && (
+                    <p style={{ fontSize: 11, color: SHEET.rosaBorde, fontStyle: "italic", margin: "8px 0 0" }}>⚠ Intereses: {fmt(ciclo.intereses)}</p>
+                  )}
+                  {ciclo.pagoMinimo > 0 && (
+                    <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Pago mínimo: {fmt(ciclo.pagoMinimo)}</p>
+                  )}
+                </>
+              ) : (
+                <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin datos de ciclo para este mes. Toca "Editar ciclo" para capturar.</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Resumen global del mes */}
+      {tarjetas.length > 0 && (
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginTop: 8 }}>
+          <div style={{ background: SHEET.amarillo, padding: "7px 12px", borderBottom: "1px solid #e6d200" }}>
+            <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>Resumen {mesLabel(mesActual)}</span>
+          </div>
+          <div style={{ padding: "10px 12px", background: "#fff" }}>
+            {["Gasto total", "Total diferidos", "Total regulares", "Total intereses", "Total pagado", "Total restante"].map((label, i) => {
+              const vals = tarjetas.map((t) => {
+                const ciclo = ciclosMes[t.id] || {};
+                const { gasto, diferidos, regulares } = calcularGastoCiclo(t.id, t.nombre, ciclo.inicioCiclo, ciclo.finCiclo);
+                const pagoSinInt = calcularPagoSinIntereses(gasto, ciclo.intereses, ciclo.adelanto, ciclo.reembolso);
+                return [gasto, diferidos, regulares, ciclo.intereses || 0, ciclo.pagado || 0, pagoSinInt - (ciclo.pagado || 0)][i];
+              });
+              const total = vals.reduce((s, v) => s + v, 0);
+              const isNeg = i === 5 && total > 0;
+              return (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
+                  <span style={{ color: "#555" }}>{label}</span>
+                  <b style={{ color: isNeg ? SHEET.rosaBorde : "#333" }}>{fmt(total)}</b>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
   const [section, setSection] = useState("cuentas");
   function addToList(path, value) {
@@ -1820,7 +2184,8 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
   const sections = [
     { id: "cuentas", label: "Cuentas" }, { id: "egresos", label: "Egresos" },
     { id: "ingresos", label: "Ingresos" },
-    { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" }
+    { id: "lugares", label: "Lugares" }, { id: "presupuestos", label: "Presupuesto" },
+    { id: "tdcconfig", label: "Tarjetas" }
   ];
   const categoriasDelTipo = catalog.categorias[newCatTipo] || [];
   const subcatActual = newSubcatCategoria && categoriasDelTipo.includes(newSubcatCategoria) ? newSubcatCategoria : (categoriasDelTipo[0] || "");
@@ -2632,6 +2997,9 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
 
       {section === "presupuestos" && (
         <PresupuestoEditor catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarAhora} movimientos={movimientos} />
+      )}
+      {section === "tdcconfig" && (
+        <TDCConfigEditor catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarAhora} />
       )}
     </div>
   );
@@ -4354,6 +4722,7 @@ export default function App() {
       {tab === "presupuesto" && <PresupuestoTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} movimientos={movimientos} />}
       {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
+      {tab === "tdc" && <TDCTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "servicios" && <ServiciosTab servicios={catalog.servicios || []} toggleActiva={toggleActivaServicioApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "seguros" && <SegurosTab seguros={catalog.seguros || []} toggleActiva={toggleActivaSeguroApp} movimientos={movimientos} userEmail={session.user.email} />}
