@@ -1548,11 +1548,11 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
 
   // Diferidos activos de una tarjeta: saldo pendiente total
   function diferidosActivosDe(tarjetaNombre) {
-    return (catalog.diferidos || []).filter((d) => d.activo && d.cuenta === tarjetaNombre);
+    return (catalog.diferidos || []).filter((d) => d.activo && d.tarjeta === tarjetaNombre);
   }
 
   function saldoPendienteDiferido(dif) {
-    return r2(Math.max(0, dif.total - (dif.pagado || 0)));
+    return r2(Math.max(0, dif.costoTotal - (dif.pagado || 0)));
   }
 
   function abrirFormCiclo(tdc) {
