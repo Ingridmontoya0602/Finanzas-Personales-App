@@ -1438,26 +1438,37 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
   }, 0);
 
   // --- Alerta Flujo de Efectivo ---
-  const totalDeudaTDCPendiente = tarjetas.reduce((s, t) => s + difPendienteTDC(t.nombre), 0);
+  // Flujo mínimo = lo que necesitas en efectivo/TDD para cubrir fijos este mes
+  const flujoMinimo = totalFijos;
+  // Deuda TDC = lo que queda restante sin pagar de TDC este ciclo
+  const deudaTDCMes = tarjetas.reduce((s, t) => {
+    const { inicioCiclo, finCiclo, fechaPago } = fechasCicloTDC(t);
+    const gasto = gastoCicloTDC(t.nombre, inicioCiclo, finCiclo);
+    const pagado = pagadoCicloTDC(t.nombre, finCiclo, fechaPago);
+    return s + Math.max(0, gasto - pagado);
+  }, 0);
   const totalPrestamos = (catalog.prestamosBancarios || []).filter(p => p.activa).reduce((s, p) => s + Math.max(0, (p.totalAPagar || 0) - (p.acumulado || 0)), 0);
+  const aportacionPrestamos = (catalog.prestamosBancarios || []).filter(p => p.activa).reduce((s, p) => s + (p.pagoPeriodo || 0), 0);
   const totalAhorroPendiente = (catalog.ahorros || []).filter(a => a.activa).reduce((s, a) => s + Math.max(0, (a.meta || 0) - (a.acumulado || 0)), 0);
+  const aportacionAhorro = (catalog.ahorros || []).filter(a => a.activa).reduce((s, a) => s + (a.aportacion || 0), 0);
   const totalInversionPendiente = (catalog.inversiones || []).filter(i => i.activa).reduce((s, i) => s + Math.max(0, (i.meta || 0) - (i.acumulado || 0)), 0);
+  const aportacionInversion = (catalog.inversiones || []).filter(i => i.activa).reduce((s, i) => s + (i.aportacion || 0), 0);
   const totalFamiliaPendiente = (catalog.familiares || []).filter(f => f.activa).reduce((s, f) => s + Math.max(0, (f.meta || 0) - (f.acumuladoAport || 0)), 0);
+  const aportacionFamilia = (catalog.familiares || []).filter(f => f.activa).reduce((s, f) => s + (f.aportacion || 0), 0);
 
-  // Promedios históricos por categoría de alerta
+  // Promedio histórico mensual de pago TDC
   const promedioTDCMensual = useMemo(() => {
     const meses = new Set(movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC").map(m => m.fecha.slice(0, 7)));
     const total = movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0);
     return meses.size > 0 ? Math.round((total / meses.size) * 100) / 100 : 0;
   }, [movimientos]);
 
-  // --- Liquidez por método (con saldo inicial estimado) ---
+  // --- Liquidez por método ---
   const liquidezDetalle = useMemo(() => {
     const metodos = ["Efectivo", "TDD", "TDC"];
     return metodos.map((met) => {
       const ingMes = movsMes.filter((m) => m.mov === "Ingreso" && m.metodo === met).reduce((s, m) => s + Number(m.cantidad), 0);
       const egMes = movsMes.filter((m) => m.mov === "Egreso" && m.metodo === met).reduce((s, m) => s + Number(m.cantidad), 0);
-      // Saldo inicial = todo lo anterior al mes filtrado
       const movAntes = movimientos.filter((m) => m.fecha.slice(0, 7) < mesFiltro && m.metodo === met);
       const ingAntes = movAntes.filter(m => m.mov === "Ingreso").reduce((s, m) => s + Number(m.cantidad), 0);
       const egAntes = movAntes.filter(m => m.mov === "Egreso").reduce((s, m) => s + Number(m.cantidad), 0);
@@ -1470,37 +1481,62 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
     ini: acc.ini + l.saldoInicial, ing: acc.ing + l.ingMes, eg: acc.eg + l.egMes, rest: acc.rest + l.restante
   }), { ini: 0, ing: 0, eg: 0, rest: 0 });
 
-  // --- Movimientos por origen/destino ---
+  // --- Movimientos por origen/destino (con desglose TDC) ---
   const movsPorMetodoIng = useMemo(() => {
     const map = {};
-    movsMes.filter(m => m.mov === "Ingreso").forEach(m => { map[m.metodo] = (map[m.metodo] || 0) + Number(m.cantidad); });
+    movsMes.filter(m => m.mov === "Ingreso").forEach(m => {
+      const key = m.metodo === "TDC" ? `TDC (${m.tipo || "Gasto"})` : m.metodo;
+      map[key] = (map[key] || 0) + Number(m.cantidad);
+    });
     return map;
   }, [movsMes]);
+
   const movsPorMetodoEg = useMemo(() => {
     const map = {};
-    movsMes.filter(m => m.mov === "Egreso").forEach(m => { map[m.metodo] = (map[m.metodo] || 0) + Number(m.cantidad); });
+    movsMes.filter(m => m.mov === "Egreso").forEach(m => {
+      // Separar TDC en Gasto vs Pago TDC
+      let key = m.metodo;
+      if (m.metodo === "TDC") key = m.tipo === "Pago TDC" ? "TDC (Pago TDC)" : "TDC (Gasto)";
+      map[key] = (map[key] || 0) + Number(m.cantidad);
+    });
     return map;
   }, [movsMes]);
+
   const promedioIngMetodo = useMemo(() => {
     const map = {}; const mesesSet = new Set();
-    movimientos.filter(m => m.mov === "Ingreso").forEach(m => { map[m.metodo] = (map[m.metodo] || 0) + Number(m.cantidad); mesesSet.add(m.fecha.slice(0, 7)); });
+    movimientos.filter(m => m.mov === "Ingreso").forEach(m => {
+      const key = m.metodo === "TDC" ? `TDC (${m.tipo || "Gasto"})` : m.metodo;
+      map[key] = (map[key] || 0) + Number(m.cantidad);
+      mesesSet.add(m.fecha.slice(0, 7));
+    });
     const n = mesesSet.size || 1;
     Object.keys(map).forEach(k => { map[k] = Math.round((map[k] / n) * 100) / 100; });
     return map;
   }, [movimientos]);
+
   const promedioEgMetodo = useMemo(() => {
     const map = {}; const mesesSet = new Set();
-    movimientos.filter(m => m.mov === "Egreso").forEach(m => { map[m.metodo] = (map[m.metodo] || 0) + Number(m.cantidad); mesesSet.add(m.fecha.slice(0, 7)); });
+    movimientos.filter(m => m.mov === "Egreso").forEach(m => {
+      let key = m.metodo;
+      if (m.metodo === "TDC") key = m.tipo === "Pago TDC" ? "TDC (Pago TDC)" : "TDC (Gasto)";
+      map[key] = (map[key] || 0) + Number(m.cantidad);
+      mesesSet.add(m.fecha.slice(0, 7));
+    });
     const n = mesesSet.size || 1;
     Object.keys(map).forEach(k => { map[k] = Math.round((map[k] / n) * 100) / 100; });
     return map;
   }, [movimientos]);
 
   // Margen de liquidez
+  // Pendiente = lo que te falta cubrir según presupuesto o alerta
   const totalPresupuestado = totalFijos + totalVariablePresup;
   const saldoActualTotal = Math.round(totLiquidez.rest * 100) / 100;
-  const margenPresupuesto = saldoActualTotal - (ingresoEsperado - totalPresupuestado);
-  const margenAlerta = saldoActualTotal - deudaTDCTotal;
+  // Presupuesto pendiente = presupuesto total − ingreso esperado (negativo = déficit)
+  const pendientePresupuesto = Math.round((ingresoEsperado - totalPresupuestado) * 100) / 100;
+  // Alerta pendiente = deuda TDC + préstamos aportación mes
+  const pendienteAlerta = Math.round((deudaTDCMes + aportacionPrestamos) * 100) / 100;
+  const margenPresupuesto = Math.round((saldoActualTotal - pendientePresupuesto) * 100) / 100;
+  const margenAlerta = Math.round((saldoActualTotal - pendienteAlerta) * 100) / 100;
 
   const seccionStyle = { marginBottom: 18 };
   const tituloStyle = { fontSize: 13, fontWeight: 700, fontStyle: "italic", borderBottom: `2px solid ${SHEET.rosaBorde}`, paddingBottom: 4, marginBottom: 8 };
@@ -1724,25 +1760,32 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
         <div>
           <p style={tituloStyle}>Alerta (Flujo de Efectivo)</p>
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 80px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
-              {["Concepto", "Promedio", "Pendiente"].map((h, i) => (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 65px 65px 65px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+              {["Concepto", "Promedio", "Este mes", "Restante"].map((h, i) => (
                 <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
               ))}
             </div>
             {[
-              { label: "Flujo Mínimo", prom: totalFijos, actual: saldoActualTotal },
-              { label: "Deuda TDC", prom: promedioTDCMensual, actual: deudaTDCTotal },
-              { label: "Familia", prom: 0, actual: totalFamiliaPendiente },
-              { label: "Préstamos", prom: (catalog.prestamosBancarios||[]).filter(p=>p.activa).reduce((s,p)=>s+(p.pagoPeriodo||0),0), actual: totalPrestamos },
-              { label: "Ahorro", prom: (catalog.ahorros||[]).filter(a=>a.activa).reduce((s,a)=>s+(a.aportacion||0),0), actual: totalAhorroPendiente },
-              { label: "Inversión", prom: (catalog.inversiones||[]).filter(i=>i.activa).reduce((s,i)=>s+(i.aportacion||0),0), actual: totalInversionPendiente },
+              { label: "Flujo Mínimo", prom: totalFijos, mesCurrent: flujoMinimo, rest: Math.max(0, flujoMinimo - egresosPorTipo["G. Fijo"] || flujoMinimo) },
+              { label: "Deuda TDC", prom: promedioTDCMensual, mesCurrent: deudaTDCMes, rest: deudaTDCMes },
+              { label: "Familia", prom: aportacionFamilia, mesCurrent: aportacionFamilia, rest: totalFamiliaPendiente },
+              { label: "Préstamos", prom: aportacionPrestamos, mesCurrent: aportacionPrestamos, rest: totalPrestamos },
+              { label: "Ahorro", prom: aportacionAhorro, mesCurrent: aportacionAhorro, rest: totalAhorroPendiente },
+              { label: "Inversión", prom: aportacionInversion, mesCurrent: aportacionInversion, rest: totalInversionPendiente },
             ].map((row) => (
-              <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1fr 70px 80px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+              <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1fr 65px 65px 65px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
                 <span style={{ fontSize: 11 }}>{row.label}</span>
                 <span style={{ fontSize: 11, textAlign: "right", color: "#aaa" }}>{row.prom > 0 ? fmt(row.prom) : "—"}</span>
-                <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{row.actual > 0 ? fmt(row.actual) : "—"}</span>
+                <span style={{ fontSize: 11, textAlign: "right" }}>{row.mesCurrent > 0 ? fmt(row.mesCurrent) : "—"}</span>
+                <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{row.rest > 0 ? fmt(row.rest) : "—"}</span>
               </div>
             ))}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 65px 65px 65px", padding: "4px 8px", background: SHEET.gris, gap: 4, borderTop: "1px solid " + SHEET.grisBorde }}>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>Total</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: "#aaa" }}>{fmt(totalFijos + promedioTDCMensual + aportacionFamilia + aportacionPrestamos + aportacionAhorro + aportacionInversion)}</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700 }}>{fmt(flujoMinimo + deudaTDCMes + aportacionFamilia + aportacionPrestamos + aportacionAhorro + aportacionInversion)}</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(deudaTDCMes + totalPrestamos + totalFamiliaPendiente + totalAhorroPendiente + totalInversionPendiente)}</span>
+            </div>
           </div>
         </div>
 
@@ -1750,17 +1793,18 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
         <div>
           <p style={tituloStyle}>Margen de Liquidez</p>
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 80px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
-              {["", "Actual", "Diferencia"].map((h, i) => (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 65px 65px 65px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+              {["", "Pendiente", "Actual", "Diferencia"].map((h, i) => (
                 <span key={i} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
               ))}
             </div>
             {[
-              { label: "Presupuesto", pendiente: ingresoEsperado - totalPresupuestado, actual: saldoActualTotal, dif: margenPresupuesto },
-              { label: "Alerta Flujo", pendiente: deudaTDCTotal, actual: saldoActualTotal, dif: margenAlerta },
+              { label: "Presupuesto", pendiente: pendientePresupuesto, actual: saldoActualTotal, dif: margenPresupuesto },
+              { label: "Alerta Flujo", pendiente: pendienteAlerta, actual: saldoActualTotal, dif: margenAlerta },
             ].map((row) => (
-              <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1fr 70px 80px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+              <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1fr 65px 65px 65px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
                 <span style={{ fontSize: 11 }}>{row.label}</span>
+                <span style={{ fontSize: 11, textAlign: "right", color: SHEET.rosaBorde }}>{fmt(row.pendiente)}</span>
                 <span style={{ fontSize: 11, textAlign: "right" }}>{fmt(row.actual)}</span>
                 <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: row.dif >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(row.dif)}</span>
               </div>
@@ -1769,21 +1813,23 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
 
           <p style={{ ...tituloStyle, marginTop: 14 }}>Movimientos (origen/destino)</p>
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ background: SHEET.verde, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+            <div style={{ background: SHEET.verde, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: SHEET.verdeBorde }}>Ingresos</span>
+              <span style={{ fontSize: 10, color: "#aaa" }}>Promedio / Actual</span>
             </div>
-            {Object.keys({ ...movsPorMetodoIng, ...promedioIngMetodo }).map((met) => (
-              <div key={met} style={{ display: "grid", gridTemplateColumns: "1fr 70px 80px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+            {Object.keys({ ...promedioIngMetodo, ...movsPorMetodoIng }).sort().map((met) => (
+              <div key={met} style={{ display: "grid", gridTemplateColumns: "1fr 70px 70px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
                 <span style={{ fontSize: 11 }}>{met}</span>
                 <span style={{ fontSize: 11, textAlign: "right", color: "#aaa" }}>{promedioIngMetodo[met] ? fmt(promedioIngMetodo[met]) : "—"}</span>
                 <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.verdeBorde }}>{movsPorMetodoIng[met] ? fmt(movsPorMetodoIng[met]) : "—"}</span>
               </div>
             ))}
-            <div style={{ background: SHEET.rosa, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, borderTop: "1px solid " + SHEET.grisBorde }}>
+            <div style={{ background: SHEET.rosa, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, borderTop: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: SHEET.rosaBorde }}>Egresos</span>
+              <span style={{ fontSize: 10, color: "#aaa" }}>Promedio / Actual</span>
             </div>
-            {Object.keys({ ...movsPorMetodoEg, ...promedioEgMetodo }).map((met) => (
-              <div key={met} style={{ display: "grid", gridTemplateColumns: "1fr 70px 80px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+            {Object.keys({ ...promedioEgMetodo, ...movsPorMetodoEg }).sort().map((met) => (
+              <div key={met} style={{ display: "grid", gridTemplateColumns: "1fr 70px 70px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
                 <span style={{ fontSize: 11 }}>{met}</span>
                 <span style={{ fontSize: 11, textAlign: "right", color: "#aaa" }}>{promedioEgMetodo[met] ? fmt(promedioEgMetodo[met]) : "—"}</span>
                 <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{movsPorMetodoEg[met] ? fmt(movsPorMetodoEg[met]) : "—"}</span>
