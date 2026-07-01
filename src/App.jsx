@@ -2890,28 +2890,54 @@ function PrestamosTab({ prestamosBancarios, prestamosTerceros, toggleActivaBanca
   const tercerosYoDebo = prestamosTerceros.filter((p) => p.direccion === "de Tercero");
 
   function exportarCSVBancarios() {
-    const headers = ["Estatus", "Nombre", "Categoría", "Frecuencia", "Método", "Monto financiado", "Pago/periodo", "Núm. pagos", "Total a pagar", "Acumulado", "Pendiente", "Últ. Pago"];
-    const filas = prestamosBancarios.map((p) => {
+    const escape = (v) => { const str = String(v ?? ""); return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str; };
+    const encabezado = [["Lo que YO debo"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+
+    // Sección 1: Bancario / Crédito
+    const headersBanc = ["Estatus", "Nombre", "Categoría", "Frecuencia", "Método", "Monto financiado", "Pago/periodo", "Núm. pagos", "Total a pagar", "Acumulado", "Pendiente", "Últ. Pago"];
+    const filasBanc = prestamosBancarios.map((p) => {
       const acumulado = p.acumulado || 0;
       const totalAPagar = p.totalAPagar || 0;
       return [p.activa ? "Activo" : "Liquidado", p.nombre, p.categoria, p.frecuencia || "Mensual", p.metodo || "",
         p.montoFinanciado || 0, p.pagoPeriodo || 0, p.numPagos || 0, totalAPagar, acumulado,
         Math.max(0, totalAPagar - acumulado), p.ultimoPago ? fmtDate(p.ultimoPago) : ""];
     });
-    const totalTotal = prestamosBancarios.reduce((s, p) => s + (p.totalAPagar || 0), 0);
-    const totalAcumulado = prestamosBancarios.reduce((s, p) => s + (p.acumulado || 0), 0);
-    const filaTotal = ["", "Total", "", "", "", "", "", "", totalTotal, totalAcumulado, Math.max(0, totalTotal - totalAcumulado), ""];
-    const escape = (v) => { const str = String(v ?? ""); return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str; };
-    const encabezado = [["Préstamos Bancario/Crédito"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
-    const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
+    const totalBancTotal = prestamosBancarios.reduce((s, p) => s + (p.totalAPagar || 0), 0);
+    const totalBancAcum = prestamosBancarios.reduce((s, p) => s + (p.acumulado || 0), 0);
+    const filaTotalBanc = ["", "TOTAL BANCARIO/CRÉDITO", "", "", "", "", "", "", totalBancTotal, totalBancAcum, Math.max(0, totalBancTotal - totalBancAcum), ""];
+
+    // Sección 2: Yo le debo a terceros
+    const tercYoDebo = prestamosTerceros.filter((p) => p.direccion === "de Tercero");
+    const headersTer = ["Persona", "Nota", "Prestado (me dieron)", "Abonado (pagué)", "Saldo pendiente"];
+    const filasTer = tercYoDebo.map((p) => {
+      const { prestado, abonado, saldo } = saldoTerceroDe(p.nombre, p.direccion);
+      return [p.nombre, p.nota || "", prestado, abonado, saldo];
+    });
+    const totalTerSaldo = tercYoDebo.reduce((s, p) => s + saldoTerceroDe(p.nombre, p.direccion).saldo, 0);
+    const filaTotalTer = ["TOTAL TERCEROS", "", "", "", totalTerSaldo];
+
+    const totalDeudaGeneral = Math.max(0, totalBancTotal - totalBancAcum) + totalTerSaldo;
+    const filaResumen = [[], ["DEUDA TOTAL", fmt(totalDeudaGeneral)]];
+
+    const csv = [
+      ...encabezado,
+      ["── BANCARIO / CRÉDITO ──"],
+      headersBanc, ...filasBanc, filaTotalBanc,
+      [],
+      ["── YO LE DEBO A TERCEROS ──"],
+      headersTer, ...filasTer, filaTotalTer,
+      ...filaResumen
+    ].map((row) => row.map(escape).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `Prestamos_Bancarios_${todayISO()}.csv`;
+    const a = document.createElement("a"); a.href = url; a.download = `Lo_que_debo_${todayISO()}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }
 
   function exportarPDFBancarios() {
-    const filas = prestamosBancarios.map((p) => {
+    const tercYoDebo = prestamosTerceros.filter((p) => p.direccion === "de Tercero");
+
+    const filasBanc = prestamosBancarios.map((p) => {
       const acumulado = p.acumulado || 0;
       const totalAPagar = p.totalAPagar || 0;
       const pendiente = Math.max(0, totalAPagar - acumulado);
@@ -2925,21 +2951,50 @@ function PrestamosTab({ prestamosBancarios, prestamosTerceros, toggleActivaBanca
         <td class="num">${pagosRestantes}</td><td>${p.ultimoPago ? fmtDate(p.ultimoPago) : "-"}</td>
       </tr>`;
     }).join("");
-    const totalTotal = prestamosBancarios.reduce((s, p) => s + (p.totalAPagar || 0), 0);
-    const totalAcumulado = prestamosBancarios.reduce((s, p) => s + (p.acumulado || 0), 0);
-    const filaTotal = `<tr class="total"><td colspan="8">Total</td>
-      <td class="num">${fmt(totalTotal)}</td><td class="num">${fmt(totalAcumulado)}</td>
-      <td class="num">${fmt(Math.max(0, totalTotal - totalAcumulado))}</td><td></td><td></td></tr>`;
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Préstamos</title>
-      <style>body{font-family:Calibri,Arial,sans-serif;padding:24px}h1{font-size:20px;margin:0 0 4px}p.sub{font-size:12px;color:#555;margin:0 0 4px}
-      table{width:100%;border-collapse:collapse;font-size:9px;margin-top:14px}th,td{border:1px solid #999;padding:4px 5px;text-align:left}
-      th{background:#F4CCCC;font-weight:700}td.num,th.num{text-align:right}tr.total td{font-weight:700;background:#FFF2CC}@media print{body{padding:0}}</style></head>
-      <body><h1>Préstamos Bancario/Crédito</h1><p class="sub">Usuario: ${userEmail || ""}</p><p class="sub">Generado el ${fmtDate(todayISO())}</p>
-      <table><thead><tr><th>Estatus</th><th>Nombre</th><th>Cat.</th><th>Frec.</th><th>Método</th>
-        <th class="num">Financiado</th><th class="num">Pago/periodo</th><th class="num">Pagos</th>
-        <th class="num">Total</th><th class="num">Acumulado</th><th class="num">Pendiente</th><th class="num">Pagos rest.</th><th>Últ. Pago</th>
-      </tr></thead><tbody>${filas}${filaTotal}</tbody></table>
-      <script>window.onload=()=>{window.print();}</script></body></html>`;
+    const totalBancTotal = prestamosBancarios.reduce((s, p) => s + (p.totalAPagar || 0), 0);
+    const totalBancAcum = prestamosBancarios.reduce((s, p) => s + (p.acumulado || 0), 0);
+    const totalBancPend = Math.max(0, totalBancTotal - totalBancAcum);
+    const filaTotalBanc = `<tr class="total"><td colspan="8">Total Bancario/Crédito</td>
+      <td class="num">${fmt(totalBancTotal)}</td><td class="num">${fmt(totalBancAcum)}</td>
+      <td class="num">${fmt(totalBancPend)}</td><td></td><td></td></tr>`;
+
+    const filasTer = tercYoDebo.map((p) => {
+      const { prestado, abonado, saldo } = saldoTerceroDe(p.nombre, p.direccion);
+      return `<tr><td>${p.nombre}</td><td>${p.nota || "-"}</td>
+        <td class="num">${fmt(prestado)}</td><td class="num">${fmt(abonado)}</td><td class="num">${fmt(saldo)}</td></tr>`;
+    }).join("");
+    const totalTerSaldo = tercYoDebo.reduce((s, p) => s + saldoTerceroDe(p.nombre, p.direccion).saldo, 0);
+    const filaTotalTer = `<tr class="total"><td colspan="4">Total Terceros</td><td class="num">${fmt(totalTerSaldo)}</td></tr>`;
+
+    const totalDeudaGeneral = totalBancPend + totalTerSaldo;
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Lo que debo</title>
+      <style>body{font-family:Calibri,Arial,sans-serif;padding:24px}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:20px 0 6px;color:#333}
+      p.sub{font-size:12px;color:#555;margin:0 0 4px}
+      table{width:100%;border-collapse:collapse;font-size:9px;margin-top:6px;margin-bottom:14px}th,td{border:1px solid #999;padding:4px 5px;text-align:left}
+      th{background:#F4CCCC;font-weight:700}td.num,th.num{text-align:right}tr.total td{font-weight:700;background:#FFF2CC}
+      .resumen{margin-top:16px;padding:10px 14px;background:#F4CCCC;border-radius:4px;font-size:13px;font-weight:700}
+      @media print{body{padding:0}}</style></head>
+      <body>
+        <h1>Lo que YO debo</h1>
+        <p class="sub">Usuario: ${userEmail || ""}</p>
+        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
+
+        <h2>Bancario / Crédito</h2>
+        <table><thead><tr><th>Estatus</th><th>Nombre</th><th>Cat.</th><th>Frec.</th><th>Método</th>
+          <th class="num">Financiado</th><th class="num">Pago/periodo</th><th class="num">Pagos</th>
+          <th class="num">Total</th><th class="num">Acumulado</th><th class="num">Pendiente</th><th class="num">Pagos rest.</th><th>Últ. Pago</th>
+        </tr></thead><tbody>${filasBanc}${filaTotalBanc}</tbody></table>
+
+        ${tercYoDebo.length > 0 ? `
+        <h2>Yo le debo a terceros</h2>
+        <table><thead><tr><th>Persona</th><th>Nota</th>
+          <th class="num">Me prestaron</th><th class="num">He pagado</th><th class="num">Saldo</th>
+        </tr></thead><tbody>${filasTer}${filaTotalTer}</tbody></table>` : ""}
+
+        <div class="resumen">DEUDA TOTAL: ${fmt(totalDeudaGeneral)}</div>
+        <script>window.onload=()=>{window.print();}</script>
+      </body></html>`;
     const ventana = window.open("", "_blank");
     if (ventana) { ventana.document.write(html); ventana.document.close(); }
   }
