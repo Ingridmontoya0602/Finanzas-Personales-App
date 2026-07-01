@@ -562,7 +562,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                       if (seg) setCantidad(String(seg.costo));
                     } else if (categoria === "Bancario" || categoria === "Crédito") {
                       const prb = (catalog.prestamosBancarios || []).find((p) => p.nombre === v);
-                      if (prb) setCantidad(String(prb.aportacion));
+                      if (prb) setCantidad(String(prb.pagoPeriodo || ""));
                     } else if (categoria === "Aportación") {
                       const fam = (catalog.familiares || []).find((f) => f.nombre === v);
                       if (fam && fam.aportacion) setCantidad(String(fam.aportacion));
@@ -948,9 +948,11 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
   const [prbCategoria, setPrbCategoria] = useState("Bancario");
   const [prbMetodo, setPrbMetodo] = useState(catalog.metodos[0] || "Efectivo");
   const [prbCuenta, setPrbCuenta] = useState("");
-  const [prbMonto, setPrbMonto] = useState("");
-  const [prbPlazo, setPrbPlazo] = useState("");
-  const [prbAportacion, setPrbAportacion] = useState("");
+  const [prbMontoFinanciado, setPrbMontoFinanciado] = useState("");
+  const [prbPagoPeriodo, setPrbPagoPeriodo] = useState("");
+  const [prbNumPagos, setPrbNumPagos] = useState("");
+  const [prbFrecuencia, setPrbFrecuencia] = useState("Mensual");
+  const [prbPagosPrevios, setPrbPagosPrevios] = useState("");
   const [editandoPrbId, setEditandoPrbId] = useState(null);
   const [prtNombre, setPrtNombre] = useState("");
   const [prtDireccion, setPrtDireccion] = useState("a Tercero");
@@ -1194,16 +1196,25 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
 
   function limpiarFormPrestamoBancario() {
     setPrbNombre(""); setPrbCategoria("Bancario"); setPrbMetodo(catalog.metodos[0] || "Efectivo"); setPrbCuenta("");
-    setPrbMonto(""); setPrbPlazo(""); setPrbAportacion(""); setEditandoPrbId(null);
+    setPrbMontoFinanciado(""); setPrbPagoPeriodo(""); setPrbNumPagos(""); setPrbFrecuencia("Mensual");
+    setPrbPagosPrevios(""); setEditandoPrbId(null);
   }
 
   function guardarPrestamoBancario() {
-    if (!prbNombre || !prbMonto || parseFloat(prbMonto) <= 0) return;
+    if (!prbNombre || !prbPagoPeriodo || parseFloat(prbPagoPeriodo) <= 0 || !prbNumPagos || parseInt(prbNumPagos) <= 0) return;
+    const pagoPeriodo = parseFloat(prbPagoPeriodo);
+    const numPagos = parseInt(prbNumPagos);
+    const pagosPrevios = Math.min(Math.max(0, parseInt(prbPagosPrevios) || 0), numPagos - 1);
+    const totalAPagar = Math.round(pagoPeriodo * numPagos * 100) / 100;
+    const acumuladoInicial = Math.round(pagosPrevios * pagoPeriodo * 100) / 100;
     const existente = (catalog.prestamosBancarios || []).find((p) => p.id === editandoPrbId);
     const pb = {
       id: editandoPrbId || uid(), activa: true, nombre: prbNombre, categoria: prbCategoria,
-      metodo: prbMetodo, cuenta: prbCuenta, montoPrestamo: parseFloat(prbMonto), plazoMeses: parseInt(prbPlazo) || 0,
-      aportacion: parseFloat(prbAportacion) || 0, acumulado: existente ? existente.acumulado : 0, ultimoPago: existente ? existente.ultimoPago : ""
+      metodo: prbMetodo, cuenta: prbCuenta,
+      montoFinanciado: parseFloat(prbMontoFinanciado) || 0,
+      pagoPeriodo, numPagos, frecuencia: prbFrecuencia, totalAPagar, pagosPrevios,
+      acumulado: existente ? existente.acumulado : acumuladoInicial,
+      ultimoPago: existente ? existente.ultimoPago : ""
     };
     const lista = catalog.prestamosBancarios || [];
     const yaExiste = lista.some((p) => p.id === pb.id);
@@ -1222,7 +1233,9 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
 
   function editarPrestamoBancario(p) {
     setEditandoPrbId(p.id); setPrbNombre(p.nombre); setPrbCategoria(p.categoria); setPrbMetodo(p.metodo);
-    setPrbCuenta(p.cuenta); setPrbMonto(String(p.montoPrestamo)); setPrbPlazo(String(p.plazoMeses)); setPrbAportacion(String(p.aportacion));
+    setPrbCuenta(p.cuenta); setPrbMontoFinanciado(String(p.montoFinanciado || ""));
+    setPrbPagoPeriodo(String(p.pagoPeriodo || "")); setPrbNumPagos(String(p.numPagos || ""));
+    setPrbFrecuencia(p.frecuencia || "Mensual"); setPrbPagosPrevios(String(p.pagosPrevios || 0));
   }
 
   function toggleActivaPrestamoBancario(id) {
@@ -1539,6 +1552,44 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                         ))}
                       </div>
                     </Field>
+                    <Field label="Frecuencia de pago">
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {["Mensual", "Quincenal", "Semanal"].map((f) => (
+                          <button key={f} onClick={() => setPrbFrecuencia(f)} style={{
+                            flex: 1, padding: "7px 0", fontSize: 11, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                            border: prbFrecuencia === f ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                            background: prbFrecuencia === f ? SHEET.azul : "#fff"
+                          }}>{f}</button>
+                        ))}
+                      </div>
+                    </Field>
+                    <Field label="Monto financiado (lo que te prestaron, sin intereses)">
+                      <input type="number" inputMode="decimal" value={prbMontoFinanciado} onChange={(e) => setPrbMontoFinanciado(e.target.value)} style={inputBase} placeholder="$0.00 — solo referencia" />
+                    </Field>
+                    <Field label="Pago por periodo (lo que pagas cada vez)">
+                      <input type="number" inputMode="decimal" value={prbPagoPeriodo} onChange={(e) => setPrbPagoPeriodo(e.target.value)} style={inputBase} placeholder="$0.00" />
+                    </Field>
+                    <Field label="Número de pagos (plazo total)">
+                      <input type="number" inputMode="numeric" value={prbNumPagos} onChange={(e) => setPrbNumPagos(e.target.value)} style={inputBase} placeholder="Ej. 24" />
+                    </Field>
+                    {prbPagoPeriodo && prbNumPagos && parseFloat(prbPagoPeriodo) > 0 && parseInt(prbNumPagos) > 0 && (
+                      <div style={{ background: SHEET.amarillo, border: "1px solid #e6d200", borderRadius: 4, padding: "8px 10px", marginBottom: 10, fontSize: 12 }}>
+                        <b>Total a pagar:</b> {fmt(Math.round(parseFloat(prbPagoPeriodo) * parseInt(prbNumPagos) * 100) / 100)}
+                        {prbMontoFinanciado && parseFloat(prbMontoFinanciado) > 0 && (
+                          <span style={{ color: "#666", marginLeft: 8 }}>
+                            · Intereses implícitos: {fmt(Math.round((parseFloat(prbPagoPeriodo) * parseInt(prbNumPagos) - parseFloat(prbMontoFinanciado)) * 100) / 100)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <Field label="Pagos ya realizados (si ya traes el crédito avanzado)">
+                      <input type="number" inputMode="numeric" value={prbPagosPrevios} onChange={(e) => setPrbPagosPrevios(e.target.value)} style={inputBase} placeholder="0" />
+                    </Field>
+                    {prbPagosPrevios && parseInt(prbPagosPrevios) > 0 && prbPagoPeriodo && parseFloat(prbPagoPeriodo) > 0 && (
+                      <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
+                        Acumulado inicial: {fmt(Math.round(parseInt(prbPagosPrevios) * parseFloat(prbPagoPeriodo) * 100) / 100)}
+                      </p>
+                    )}
                     <Field label="Método de pago">
                       <select value={prbMetodo} onChange={(e) => { setPrbMetodo(e.target.value); setPrbCuenta(""); }} style={inputBase}>
                         {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -1552,17 +1603,8 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
                         </select>
                       </Field>
                     )}
-                    <Field label="Monto del préstamo (lo que te prestaron)">
-                      <input type="number" inputMode="decimal" value={prbMonto} onChange={(e) => setPrbMonto(e.target.value)} style={inputBase} placeholder="$0.00" />
-                    </Field>
-                    <Field label="Plazo (meses)">
-                      <input type="number" inputMode="numeric" value={prbPlazo} onChange={(e) => setPrbPlazo(e.target.value)} style={inputBase} placeholder="Ej. 24" />
-                    </Field>
-                    <Field label="Aportación (pago mensual)">
-                      <input type="number" inputMode="decimal" value={prbAportacion} onChange={(e) => setPrbAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
-                    </Field>
-                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
-                      Se marca como liquidado automáticamente cuando lo pagado alcance el monto del préstamo.
+                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "0 0 10px" }}>
+                      Se liquida automáticamente cuando los pagos registrados alcancen el total a pagar.
                     </p>
                     <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                       <Btn primary full onClick={guardarPrestamoBancario}>{editandoPrbId ? "Guardar cambios" : "Agregar préstamo"}</Btn>
@@ -1572,24 +1614,32 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
 
                   <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Tus préstamos</p>
                   {(catalog.prestamosBancarios || []).length === 0 && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin préstamos aún.</p>}
-                  {(catalog.prestamosBancarios || []).map((p) => (
-                    <div key={p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: p.activa ? "#fff" : SHEET.gris }}>
-                      <div style={{ minWidth: 0 }}>
-                        <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{p.nombre} <span style={{ fontWeight: 400, fontSize: 11, color: "#777" }}>({p.categoria})</span></p>
-                        <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
-                          {fmt(p.acumulado)} de {fmt(p.montoPrestamo)} · Aportación {fmt(p.aportacion)} · {p.plazoMeses} meses
-                        </p>
-                      </div>
-                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
-                        <button onClick={() => toggleActivaPrestamoBancario(p.id)} style={{
-                          fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                          border: "1px solid " + SHEET.grisBorde, background: p.activa ? SHEET.verde : "#fff", color: SHEET.texto
-                        }}>{p.activa ? "Activo" : "Liquidado"}</button>
+                  {(catalog.prestamosBancarios || []).map((p) => {
+                    const pendiente = Math.max(0, (p.totalAPagar || 0) - (p.acumulado || 0));
+                    return (
+                    <div key={p.id} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 8, background: p.activa ? "#fff" : SHEET.gris }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{p.nombre} <span style={{ fontWeight: 400, fontSize: 11, color: "#777" }}>({p.categoria})</span></p>
+                          <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                            {fmt(p.pagoPeriodo || 0)}/{p.frecuencia || "Mensual"} · {p.numPagos || 0} pagos · Total {fmt(p.totalAPagar || 0)}
+                          </p>
+                          <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>
+                            Pagado {fmt(p.acumulado || 0)} · Pendiente {fmt(pendiente)}
+                          </p>
+                        </div>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                          <button onClick={() => toggleActivaPrestamoBancario(p.id)} style={{
+                            fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                            border: "1px solid " + SHEET.grisBorde, background: p.activa ? SHEET.verde : "#fff", color: SHEET.texto
+                          }}>{p.activa ? "Activo" : "Liquidado"}</button>
                         <button onClick={() => editarPrestamoBancario(p)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13 }}>✎</button>
                         <button onClick={() => eliminarPrestamoBancario(p.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, fontSize: 13 }}>✕</button>
                       </div>
                     </div>
-                  ))}
+                    </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <div>
@@ -2729,82 +2779,56 @@ function PrestamosTab({ prestamosBancarios, prestamosTerceros, toggleActivaBanca
   const tercerosYoDebo = prestamosTerceros.filter((p) => p.direccion === "de Tercero");
 
   function exportarCSVBancarios() {
-    const headers = ["Activo/Liquidado", "Nombre", "Categoría", "Método", "Monto préstamo", "Plazo (meses)", "Aportación", "Acumulado", "Pendiente", "Últ. Pago"];
+    const headers = ["Estatus", "Nombre", "Categoría", "Frecuencia", "Método", "Monto financiado", "Pago/periodo", "Núm. pagos", "Total a pagar", "Acumulado", "Pendiente", "Últ. Pago"];
     const filas = prestamosBancarios.map((p) => {
       const acumulado = p.acumulado || 0;
-      const ultPago = p.ultimoPago;
-      return [p.activa ? "Activo" : "Liquidado", p.nombre, p.categoria, p.metodo || "", p.montoPrestamo, p.plazoMeses, p.aportacion, acumulado, Math.max(0, p.montoPrestamo - acumulado), ultPago ? fmtDate(ultPago) : ""];
+      const totalAPagar = p.totalAPagar || 0;
+      return [p.activa ? "Activo" : "Liquidado", p.nombre, p.categoria, p.frecuencia || "Mensual", p.metodo || "",
+        p.montoFinanciado || 0, p.pagoPeriodo || 0, p.numPagos || 0, totalAPagar, acumulado,
+        Math.max(0, totalAPagar - acumulado), p.ultimoPago ? fmtDate(p.ultimoPago) : ""];
     });
-    const totalMonto = prestamosBancarios.reduce((s, p) => s + p.montoPrestamo, 0);
+    const totalTotal = prestamosBancarios.reduce((s, p) => s + (p.totalAPagar || 0), 0);
     const totalAcumulado = prestamosBancarios.reduce((s, p) => s + (p.acumulado || 0), 0);
-    const filaTotal = ["", "Total", "", "", totalMonto, "", "", totalAcumulado, Math.max(0, totalMonto - totalAcumulado), ""];
-    const escape = (v) => {
-      const str = String(v ?? "");
-      return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str;
-    };
-    const encabezado = [["Estado de cuenta de Préstamos Bancario/Crédito"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
+    const filaTotal = ["", "Total", "", "", "", "", "", "", totalTotal, totalAcumulado, Math.max(0, totalTotal - totalAcumulado), ""];
+    const escape = (v) => { const str = String(v ?? ""); return str.includes(",") || str.includes('"') || str.includes("\n") ? `"${str.replace(/"/g, '""')}"` : str; };
+    const encabezado = [["Préstamos Bancario/Crédito"], [`Usuario: ${userEmail || ""}`], [`Generado el: ${fmtDate(todayISO())}`], []];
     const csv = [...encabezado, headers, ...filas, filaTotal].map((row) => row.map(escape).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `Prestamos_Bancarios_${todayISO()}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const a = document.createElement("a"); a.href = url; a.download = `Prestamos_Bancarios_${todayISO()}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
   }
 
   function exportarPDFBancarios() {
     const filas = prestamosBancarios.map((p) => {
       const acumulado = p.acumulado || 0;
-      const ultPago = p.ultimoPago;
+      const totalAPagar = p.totalAPagar || 0;
+      const pendiente = Math.max(0, totalAPagar - acumulado);
+      const pagosRestantes = p.pagoPeriodo > 0 ? Math.ceil(pendiente / p.pagoPeriodo) : 0;
       return `<tr>
-        <td>${p.activa ? "Activo" : "Liquidado"}</td>
-        <td>${p.nombre}</td>
-        <td>${p.categoria}</td>
-        <td>${p.metodo || "-"}</td>
-        <td class="num">${fmt(p.montoPrestamo)}</td>
-        <td class="num">${p.plazoMeses}</td>
-        <td class="num">${fmt(p.aportacion)}</td>
-        <td class="num">${fmt(acumulado)}</td>
-        <td class="num">${fmt(Math.max(0, p.montoPrestamo - acumulado))}</td>
-        <td>${ultPago ? fmtDate(ultPago) : "-"}</td>
+        <td>${p.activa ? "Activo" : "Liquidado"}</td><td>${p.nombre}</td><td>${p.categoria}</td>
+        <td>${p.frecuencia || "Mensual"}</td><td>${p.metodo || "-"}</td>
+        <td class="num">${fmt(p.montoFinanciado || 0)}</td><td class="num">${fmt(p.pagoPeriodo || 0)}</td>
+        <td class="num">${p.numPagos || 0}</td><td class="num">${fmt(totalAPagar)}</td>
+        <td class="num">${fmt(acumulado)}</td><td class="num">${fmt(pendiente)}</td>
+        <td class="num">${pagosRestantes}</td><td>${p.ultimoPago ? fmtDate(p.ultimoPago) : "-"}</td>
       </tr>`;
     }).join("");
-    const totalMonto = prestamosBancarios.reduce((s, p) => s + p.montoPrestamo, 0);
+    const totalTotal = prestamosBancarios.reduce((s, p) => s + (p.totalAPagar || 0), 0);
     const totalAcumulado = prestamosBancarios.reduce((s, p) => s + (p.acumulado || 0), 0);
-    const filaTotal = `<tr class="total">
-        <td colspan="4">Total</td>
-        <td class="num">${fmt(totalMonto)}</td>
-        <td></td><td></td>
-        <td class="num">${fmt(totalAcumulado)}</td>
-        <td class="num">${fmt(Math.max(0, totalMonto - totalAcumulado))}</td>
-        <td></td>
-      </tr>`;
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Préstamos Bancario/Crédito</title>
-      <style>
-        body { font-family: Calibri, 'Segoe UI', Arial, sans-serif; padding: 24px; color: #000; }
-        h1 { font-size: 20px; margin: 0 0 4px; }
-        p.sub { font-size: 12px; color: #555; margin: 0 0 4px; }
-        table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 14px; }
-        th, td { border: 1px solid #999; padding: 5px 6px; text-align: left; }
-        th { background: #F4CCCC; font-weight: 700; }
-        td.num, th.num { text-align: right; }
-        tr.total td { font-weight: 700; background: #FFF2CC; }
-        @media print { body { padding: 0; } }
-      </style></head>
-      <body>
-        <h1>Estado de cuenta de Préstamos Bancario/Crédito</h1>
-        <p class="sub">Usuario: ${userEmail || ""}</p>
-        <p class="sub">Generado el ${fmtDate(todayISO())}</p>
-        <table>
-          <thead><tr>
-            <th>Estatus</th><th>Nombre</th><th>Categoría</th><th>Método</th>
-            <th class="num">Monto</th><th class="num">Plazo</th><th class="num">Aportación</th>
-            <th class="num">Acumulado</th><th class="num">Pendiente</th><th>Últ. Pago</th>
-          </tr></thead>
-          <tbody>${filas}${filaTotal}</tbody>
-        </table>
-        <script>window.onload = () => { window.print(); };</script>
-      </body></html>`;
+    const filaTotal = `<tr class="total"><td colspan="8">Total</td>
+      <td class="num">${fmt(totalTotal)}</td><td class="num">${fmt(totalAcumulado)}</td>
+      <td class="num">${fmt(Math.max(0, totalTotal - totalAcumulado))}</td><td></td><td></td></tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Préstamos</title>
+      <style>body{font-family:Calibri,Arial,sans-serif;padding:24px}h1{font-size:20px;margin:0 0 4px}p.sub{font-size:12px;color:#555;margin:0 0 4px}
+      table{width:100%;border-collapse:collapse;font-size:9px;margin-top:14px}th,td{border:1px solid #999;padding:4px 5px;text-align:left}
+      th{background:#F4CCCC;font-weight:700}td.num,th.num{text-align:right}tr.total td{font-weight:700;background:#FFF2CC}@media print{body{padding:0}}</style></head>
+      <body><h1>Préstamos Bancario/Crédito</h1><p class="sub">Usuario: ${userEmail || ""}</p><p class="sub">Generado el ${fmtDate(todayISO())}</p>
+      <table><thead><tr><th>Estatus</th><th>Nombre</th><th>Cat.</th><th>Frec.</th><th>Método</th>
+        <th class="num">Financiado</th><th class="num">Pago/periodo</th><th class="num">Pagos</th>
+        <th class="num">Total</th><th class="num">Acumulado</th><th class="num">Pendiente</th><th class="num">Pagos rest.</th><th>Últ. Pago</th>
+      </tr></thead><tbody>${filas}${filaTotal}</tbody></table>
+      <script>window.onload=()=>{window.print();}</script></body></html>`;
     const ventana = window.open("", "_blank");
     if (ventana) { ventana.document.write(html); ventana.document.close(); }
   }
@@ -2868,13 +2892,15 @@ function PrestamosTab({ prestamosBancarios, prestamosTerceros, toggleActivaBanca
 
   function TarjetaBancario({ p }) {
     const acumulado = p.acumulado || 0;
-    const pendiente = Math.max(0, p.montoPrestamo - acumulado);
+    const totalAPagar = p.totalAPagar || 0;
+    const pendiente = Math.max(0, totalAPagar - acumulado);
+    const pagosRestantes = p.pagoPeriodo > 0 ? Math.ceil(pendiente / p.pagoPeriodo) : 0;
     return (
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: p.activa ? "#fff" : SHEET.gris }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ minWidth: 0 }}>
-            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{p.nombre}</p>
-            <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{p.categoria}</p>
+            <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{p.nombre} <span style={{ fontWeight: 400, fontSize: 11, color: "#777" }}>({p.categoria})</span></p>
+            <p style={{ fontSize: 11, color: "#555", margin: "1px 0 0" }}>{p.frecuencia || "Mensual"} · {p.metodo}{p.cuenta ? ` · ${p.cuenta}` : ""}</p>
           </div>
           <span style={{
             fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "4px 8px", borderRadius: 3, fontFamily: SHEET.fuente,
@@ -2882,13 +2908,16 @@ function PrestamosTab({ prestamosBancarios, prestamosTerceros, toggleActivaBanca
           }}>{p.activa ? "Activo" : "Liquidado"}</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 8, fontSize: 11.5 }}>
-          <div><span style={{ color: "#777" }}>Monto</span><br /><b>{fmt(p.montoPrestamo)}</b></div>
-          <div><span style={{ color: "#777" }}>Pagado</span><br /><b>{fmt(acumulado)}</b></div>
-          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b>{fmt(pendiente)}</b></div>
+          <div><span style={{ color: "#777" }}>Pago/periodo</span><br /><b>{fmt(p.pagoPeriodo || 0)}</b></div>
+          <div><span style={{ color: "#777" }}>Total a pagar</span><br /><b>{fmt(totalAPagar)}</b></div>
+          <div><span style={{ color: "#777" }}>Pagos rest.</span><br /><b>{pagosRestantes}</b></div>
         </div>
-        <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic" }}>
-          Aportación {fmt(p.aportacion)} · {p.plazoMeses} meses · {p.metodo}{p.cuenta ? ` · ${p.cuenta}` : ""}
-        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginTop: 6, fontSize: 11.5 }}>
+          <div><span style={{ color: "#777" }}>Acumulado</span><br /><b>{fmt(acumulado)}</b></div>
+          <div><span style={{ color: "#777" }}>Pendiente</span><br /><b>{fmt(pendiente)}</b></div>
+          {(p.montoFinanciado || 0) > 0 && <div><span style={{ color: "#777" }}>Financiado</span><br /><b>{fmt(p.montoFinanciado)}</b></div>}
+        </div>
+        {p.ultimoPago && <p style={{ fontSize: 11, color: "#888", margin: "6px 0 0", fontStyle: "italic" }}>Último pago: {fmtDate(p.ultimoPago)}</p>}
       </div>
     );
   }
@@ -3505,7 +3534,7 @@ export default function App() {
         const prestamo = lista.find((p) => p.nombre === entry.subcategoria && p.categoria === entry.categoria);
         if (prestamo) {
           const nuevoAcumulado = Math.round((Number(prestamo.acumulado || 0) + Number(entry.cantidad)) * 100) / 100;
-          const liquidado = nuevoAcumulado >= prestamo.montoPrestamo;
+          const liquidado = nuevoAcumulado >= (prestamo.totalAPagar || 0);
           const actualizado = {
             ...catalogRef.current,
             prestamosBancarios: lista.map((p) => (p.id === prestamo.id ? { ...p, acumulado: nuevoAcumulado, ultimoPago: entry.fecha, activa: !liquidado } : p))
