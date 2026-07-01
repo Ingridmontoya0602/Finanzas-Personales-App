@@ -1658,7 +1658,10 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
   }
 
   function saldoPendienteDiferido(dif) {
-    return r2(Math.max(0, dif.costoTotal - (dif.pagado || 0)));
+    // Si lleva intereses, el banco descuenta del límite solo el capital pendiente (no los intereses futuros)
+    const base = dif.conIntereses && dif.capitalOriginal ? dif.capitalOriginal : dif.costoTotal;
+    const pagadoCapital = dif.pagado || 0;
+    return r2(Math.max(0, base - pagadoCapital));
   }
 
   function abrirFormCiclo(tdc) {
@@ -3336,7 +3339,8 @@ function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferi
   }
 
   function Tarjeta({ d }) {
-    const capitalPendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
+    const baseCapital = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
+    const capitalPendiente = Math.round((baseCapital - d.pagado) * 100) / 100;
     const interesesPagados = d.interesesPagados || 0;
     const totalRealPagado = Math.round((d.pagado + interesesPagados) * 100) / 100;
     const interesesTotalesImplicitos = d.conIntereses && d.capitalOriginal ? Math.round((d.costoTotal - d.capitalOriginal) * 100) / 100 : 0;
