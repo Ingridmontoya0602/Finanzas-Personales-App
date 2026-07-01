@@ -3190,7 +3190,7 @@ function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferi
     const interesesPagados = d.interesesPagados || 0;
     const totalRealPagado = Math.round((d.pagado + interesesPagados) * 100) / 100;
     return (
-      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "10px 12px", marginBottom: 10, background: d.activo ? "#fff" : SHEET.gris }}>
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "8px 10px", marginBottom: 6, background: d.activo ? "#fff" : SHEET.gris }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ minWidth: 0 }}>
             <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>
@@ -3285,7 +3285,7 @@ function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferi
               </div>
             </div>
           ) : (
-            <Btn primary full onClick={() => abrirPago(d)} style={{ marginTop: 8 }}>Registrar pago de este mes</Btn>
+            <Btn primary full onClick={() => abrirPago(d)} style={{ marginTop: 6, fontSize: 12, padding: "7px 0" }}>Registrar pago de este mes</Btn>
           )
         )}
       </div>
