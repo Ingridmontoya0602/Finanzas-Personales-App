@@ -1316,13 +1316,11 @@ function PresupuestoTab({ catalog, movimientos, userEmail }) {
 }
 
 function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
-  const [editandoId, setEditandoId] = useState(null); // nombre de tarjeta editando
+  const [editandoId, setEditandoId] = useState(null);
   const [form, setForm] = useState({});
   const [nuevoNombre, setNuevoNombre] = useState("");
 
-  // Lista maestra: nombres de cuentas.TDC
   const nombresTDC = catalog.cuentas.TDC || [];
-  // Detalle por nombre
   const detalles = catalog.tarjetasTDC || [];
   function detalleDe(nombre) { return detalles.find((t) => t.nombre === nombre) || null; }
 
@@ -1331,7 +1329,7 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
     setEditandoId(nombre);
     setForm({
       limite: d ? String(d.limite || "") : "",
-      diasPago: d ? String(d.diasPago || "20") : "20",
+      diaCiclo: d ? String(d.diaCiclo || "") : "",
       anualidad: d ? (d.anualidad || false) : false,
       activa: d ? d.activa !== false : true,
     });
@@ -1344,7 +1342,7 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
       id: existente ? existente.id : uid(),
       nombre, activa: form.activa !== false,
       limite: parseFloat(form.limite) || 0,
-      diasPago: parseInt(form.diasPago) || 20,
+      diaCiclo: parseInt(form.diaCiclo) || 1,
       anualidad: form.anualidad || false,
     };
     const nuevas = existente
@@ -1361,9 +1359,8 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
     const actualizado = { ...catalog, cuentas: { ...catalog.cuentas, TDC: nuevasCuentas } };
     setCatalog(actualizado); guardarAhora(actualizado);
     setNuevoNombre("");
-    // Abrir edición inmediatamente
     setEditandoId(nombre);
-    setForm({ limite: "", diasPago: "20", anualidad: false, activa: true });
+    setForm({ limite: "", diaCiclo: "", anualidad: false, activa: true });
   }
 
   function eliminarTarjeta(nombre) {
@@ -1385,26 +1382,23 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
       <p style={{ fontSize: 11.5, color: "#666", fontStyle: "italic", marginBottom: 12 }}>
-        Tus tarjetas de TDC — toca ✎ para agregar límite, días de pago y anualidad.
+        Configura cada tarjeta una vez — las fechas de ciclo se calculan automático cada mes.
       </p>
-
-      {/* Lista de tarjetas existentes */}
       {nombresTDC.length === 0 && (
-        <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 12 }}>Sin tarjetas aún. Agrega una abajo.</p>
+        <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", marginBottom: 12 }}>Sin tarjetas. Agrega una abajo.</p>
       )}
       {nombresTDC.map((nombre) => {
         const d = detalleDe(nombre);
         const editando = editandoId === nombre;
-        const tieneDetalle = d && (d.limite > 0 || d.diasPago);
+        const tieneDetalle = d && d.limite > 0 && d.diaCiclo;
         return (
           <div key={nombre} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, marginBottom: 10, overflow: "hidden" }}>
-            {/* Cabecera */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", background: d && !d.activa ? SHEET.gris : "#fff" }}>
               <div>
                 <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{nombre}</p>
                 {tieneDetalle ? (
                   <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>
-                    Límite {fmt(d.limite)} · {d.diasPago} días · Anualidad: {d.anualidad ? "Sí" : "No"}
+                    Límite {fmt(d.limite)} · Corte día {d.diaCiclo} · Anualidad: {d.anualidad ? "Sí" : "No"}
                   </p>
                 ) : (
                   <p style={{ fontSize: 11, color: SHEET.amarilloBorde, fontStyle: "italic", margin: "2px 0 0" }}>⚠ Sin datos — toca ✎ para completar</p>
@@ -1417,16 +1411,10 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
                     border: "1px solid " + SHEET.grisBorde, background: d.activa !== false ? SHEET.verde : "#fff", color: SHEET.texto
                   }}>{d.activa !== false ? "Activa" : "Inactiva"}</button>
                 )}
-                <button onClick={() => editando ? setEditandoId(null) : abrirEdicion(nombre)} style={{
-                  background: "none", border: "none", cursor: "pointer", fontSize: 14, color: SHEET.azulBorde
-                }}>{editando ? "✕" : "✎"}</button>
-                <button onClick={() => eliminarTarjeta(nombre)} style={{
-                  background: "none", border: "none", cursor: "pointer", fontSize: 14, color: SHEET.rosaBorde
-                }}>🗑</button>
+                <button onClick={() => editando ? setEditandoId(null) : abrirEdicion(nombre)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: SHEET.azulBorde }}>{editando ? "✕" : "✎"}</button>
+                <button onClick={() => eliminarTarjeta(nombre)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: SHEET.rosaBorde }}>🗑</button>
               </div>
             </div>
-
-            {/* Formulario inline */}
             {editando && (
               <div style={{ padding: "10px 12px", background: SHEET.gris, borderTop: "1px solid " + SHEET.grisBorde }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -1434,9 +1422,9 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
                     <input type="number" inputMode="decimal" value={form.limite || ""} onChange={(e) => setForm((p) => ({ ...p, limite: e.target.value }))}
                       style={{ ...inputBase, border: `2px solid ${SHEET.rojo}` }} placeholder="$0.00" />
                   </Field>
-                  <Field label="Días para pagar (post-corte)">
-                    <input type="number" inputMode="numeric" value={form.diasPago || ""} onChange={(e) => setForm((p) => ({ ...p, diasPago: e.target.value }))}
-                      style={{ ...inputBase, border: `2px solid ${SHEET.rojo}` }} placeholder="20" />
+                  <Field label="Día de corte (del mes)">
+                    <input type="number" inputMode="numeric" value={form.diaCiclo || ""} onChange={(e) => setForm((p) => ({ ...p, diaCiclo: e.target.value }))}
+                      style={{ ...inputBase, border: `2px solid ${SHEET.rojo}` }} placeholder="Ej. 5, 8, 14" />
                   </Field>
                 </div>
                 <Field label="¿Tiene anualidad?">
@@ -1450,7 +1438,10 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
                     ))}
                   </div>
                 </Field>
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <p style={{ fontSize: 11, color: "#666", fontStyle: "italic", margin: "4px 0 8px" }}>
+                  Los días para pagar se capturan cada mes en Tarjetas de Crédito, ya que pueden variar.
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
                   <Btn primary full onClick={guardarDetalle}>Guardar</Btn>
                   <Btn full onClick={() => setEditandoId(null)}>Cancelar</Btn>
                 </div>
@@ -1459,16 +1450,24 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
           </div>
         );
       })}
-
-      {/* Agregar nueva tarjeta */}
       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
         <input type="text" value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && agregarNueva()}
-          placeholder="Nombre de nueva tarjeta..." style={{ ...inputBase, flex: 1, border: `2px solid ${SHEET.grisBorde}` }} />
+          placeholder="Nombre de nueva tarjeta..." style={{ ...inputBase, flex: 1 }} />
         <Btn primary onClick={agregarNueva}>+ Agregar</Btn>
       </div>
     </div>
   );
+}
+
+function calcFechasCiclo(diaCiclo, mesYM) {
+  if (!diaCiclo || !mesYM) return { inicioCiclo: "", finCiclo: "" };
+  const [y, m] = mesYM.split("-").map(Number);
+  const finDate = new Date(y, m - 1, diaCiclo);
+  const finCiclo = finDate.toISOString().slice(0, 10);
+  const inicioDate = new Date(y, m - 2, diaCiclo + 1);
+  const inicioCiclo = inicioDate.toISOString().slice(0, 10);
+  return { inicioCiclo, finCiclo };
 }
 
 function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
@@ -1477,7 +1476,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
   const detallesTDC = catalog.tarjetasTDC || [];
   const tarjetas = nombresTDC.map((nombre) => {
     const d = detallesTDC.find((t) => t.nombre === nombre);
-    return d && d.activa !== false ? { id: nombre, nombre, limite: 0, diasPago: 20, anualidad: false, ...d } : null;
+    return d && d.activa !== false ? { nombre, limite: 0, diaCiclo: 1, anualidad: false, ...d } : null;
   }).filter(Boolean);
 
   const mesesDisponibles = useMemo(() => {
@@ -1487,44 +1486,82 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
   }, [movimientos, today]);
 
   const [mesActual, setMesActual] = useState(today);
-  const [editandoCicloId, setEditandoCicloId] = useState(null); // tdcId que se está editando
+  const [editandoCicloId, setEditandoCicloId] = useState(null);
   const [formCiclo, setFormCiclo] = useState({});
 
   const ciclosTDC = catalog.ciclosTDC || {};
   const ciclosMes = ciclosTDC[mesActual] || {};
 
-  function abrirFormCiclo(tdc) {
-    const ciclo = ciclosMes[tdc.id] || {};
-    // Calcular fecha de inicio sugerida (mes anterior mismo día)
-    const [y, m] = mesActual.split("-").map(Number);
-    const finCicloSugerido = `${mesActual}-${String(tdc.diasPago > 0 ? tdc.diasPago : 8).padStart(2, "0")}`;
-    setFormCiclo({
-      inicioCiclo: ciclo.inicioCiclo || "",
-      finCiclo: ciclo.finCiclo || "",
-      fechaPago: ciclo.fechaPago || "",
-      pagoMinimo: ciclo.pagoMinimo || "",
-      intereses: ciclo.intereses || "",
-      adelanto: ciclo.adelanto || "",
-      reembolso: ciclo.reembolso || "",
-      pagado: ciclo.pagado || "",
-    });
-    setEditandoCicloId(tdc.id);
+  function fechasCiclo(tdc) {
+    const { inicioCiclo, finCiclo } = calcFechasCiclo(tdc.diaCiclo, mesActual);
+    const ciclo = ciclosMes[tdc.nombre] || {};
+    let fechaPago = "";
+    if (finCiclo && ciclo.diasPago > 0) {
+      const d = new Date(finCiclo);
+      d.setDate(d.getDate() + ciclo.diasPago);
+      fechaPago = d.toISOString().slice(0, 10);
+    }
+    return { inicioCiclo, finCiclo, fechaPago };
   }
 
-  function guardarCiclo() {
+  function calcularGastoCiclo(tarjetaNombre, inicioCiclo, finCiclo) {
+    if (!inicioCiclo || !finCiclo) return { gasto: 0, diferidos: 0, regulares: 0 };
+    const movsCiclo = movimientos.filter((m) =>
+      m.mov === "Egreso" && m.cuenta === tarjetaNombre &&
+      m.fecha >= inicioCiclo && m.fecha <= finCiclo &&
+      m.tipo !== "Pago TDC"
+    );
+    const diferidos = movsCiclo.filter((m) => m.lugar && m.lugar.startsWith("__diferido:")).reduce((s, m) => s + Number(m.cantidad), 0);
+    const gasto = movsCiclo.reduce((s, m) => s + Number(m.cantidad), 0);
+    return { gasto, diferidos, regulares: gasto - diferidos };
+  }
+
+  function calcularAdelanto(tarjetaNombre, inicioCiclo, finCiclo) {
+    if (!inicioCiclo || !finCiclo) return 0;
+    return movimientos.filter((m) =>
+      m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === tarjetaNombre &&
+      m.fecha >= inicioCiclo && m.fecha <= finCiclo
+    ).reduce((s, m) => s + Number(m.cantidad), 0);
+  }
+
+  function calcularPagado(tarjetaNombre, finCiclo, fechaPago) {
+    if (!finCiclo) return 0;
+    const d = new Date(finCiclo); d.setDate(d.getDate() + 1);
+    const desde = d.toISOString().slice(0, 10);
+    const hasta = fechaPago || "9999-12-31";
+    return movimientos.filter((m) =>
+      m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === tarjetaNombre &&
+      m.fecha >= desde && m.fecha <= hasta
+    ).reduce((s, m) => s + Number(m.cantidad), 0);
+  }
+
+  function calcularReembolso(tarjetaNombre, inicioCiclo, finCiclo) {
+    if (!inicioCiclo || !finCiclo) return 0;
+    return movimientos.filter((m) =>
+      m.mov === "Ingreso" && m.ingresoTipo === "Reembolso" && m.cuenta === tarjetaNombre &&
+      m.fecha >= inicioCiclo && m.fecha <= finCiclo
+    ).reduce((s, m) => s + Number(m.cantidad), 0);
+  }
+
+  function abrirFormCiclo(tdc) {
+    const ciclo = ciclosMes[tdc.nombre] || {};
+    setFormCiclo({
+      diasPago: ciclo.diasPago ? String(ciclo.diasPago) : "",
+      pagoMinimo: ciclo.pagoMinimo ? String(ciclo.pagoMinimo) : "",
+      intereses: ciclo.intereses ? String(ciclo.intereses) : "",
+    });
+    setEditandoCicloId(tdc.nombre);
+  }
+
+  function guardarCiclo(nombreTdc) {
     const nuevos = {
       ...ciclosTDC,
       [mesActual]: {
         ...ciclosMes,
-        [editandoCicloId]: {
-          inicioCiclo: formCiclo.inicioCiclo,
-          finCiclo: formCiclo.finCiclo,
-          fechaPago: formCiclo.fechaPago,
+        [nombreTdc]: {
+          diasPago: parseInt(formCiclo.diasPago) || 0,
           pagoMinimo: parseFloat(formCiclo.pagoMinimo) || 0,
           intereses: parseFloat(formCiclo.intereses) || 0,
-          adelanto: parseFloat(formCiclo.adelanto) || 0,
-          reembolso: parseFloat(formCiclo.reembolso) || 0,
-          pagado: parseFloat(formCiclo.pagado) || 0,
         }
       }
     };
@@ -1532,38 +1569,22 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
     setCatalog(actualizado); guardarAhora(actualizado); setEditandoCicloId(null);
   }
 
-  function calcularGastoCiclo(tdcId, tarjetaNombre, inicioCiclo, finCiclo) {
-    if (!inicioCiclo || !finCiclo) return { gasto: 0, diferidos: 0, regulares: 0 };
-    const movsCiclo = movimientos.filter((m) =>
-      m.mov === "Egreso" && m.cuenta === tarjetaNombre &&
-      m.fecha >= inicioCiclo && m.fecha <= finCiclo
-    );
-    const diferidos = movsCiclo.filter((m) => m.tipo === "Pago TDC" || (m.lugar && m.lugar.startsWith("__diferido:"))).reduce((s, m) => s + Number(m.cantidad), 0);
-    const gasto = movsCiclo.reduce((s, m) => s + Number(m.cantidad), 0);
-    const regulares = gasto - diferidos;
-    return { gasto, diferidos, regulares };
-  }
-
-  function calcularPagoSinIntereses(gasto, intereses, adelanto, reembolso) {
-    return Math.max(0, gasto + (intereses || 0) + (adelanto || 0) - (reembolso || 0));
-  }
-
   function exportarCSV() {
     const escape = (v) => { const s = String(v ?? ""); return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s; };
-    const headers = ["Tarjeta", "Inicio Ciclo", "Fin Ciclo", "Fecha Pago", "Intereses", "Pago Mín.", "Gasto Ciclo", "Diferidos", "Regulares", "Adelanto", "Pago Sin Int.", "Reembolso", "Pagado", "Restante"];
+    const headers = ["Tarjeta", "Inicio Ciclo", "Fin Ciclo", "Fecha Límite Pago", "Intereses", "Pago Mín.", "Gasto Ciclo", "Diferidos", "Regulares", "Adelanto", "Pago Sin Int.", "Reembolso", "Pagado", "Restante"];
     const filas = tarjetas.map((t) => {
-      const ciclo = ciclosMes[t.id] || {};
-      const { gasto, diferidos, regulares } = calcularGastoCiclo(t.id, t.nombre, ciclo.inicioCiclo, ciclo.finCiclo);
-      const pagoSinInt = calcularPagoSinIntereses(gasto, ciclo.intereses, ciclo.adelanto, ciclo.reembolso);
-      const restante = pagoSinInt - (ciclo.pagado || 0);
-      return [t.nombre, ciclo.inicioCiclo || "", ciclo.finCiclo || "", ciclo.fechaPago || "",
-        ciclo.intereses || 0, ciclo.pagoMinimo || 0, gasto, diferidos, regulares,
-        ciclo.adelanto || 0, pagoSinInt, ciclo.reembolso || 0, ciclo.pagado || 0, restante];
+      const { inicioCiclo, finCiclo, fechaPago } = fechasCiclo(t);
+      const { gasto, diferidos, regulares } = calcularGastoCiclo(t.nombre, inicioCiclo, finCiclo);
+      const ciclo = ciclosMes[t.nombre] || {};
+      const adelanto = calcularAdelanto(t.nombre, inicioCiclo, finCiclo);
+      const reembolso = calcularReembolso(t.nombre, inicioCiclo, finCiclo);
+      const pagado = calcularPagado(t.nombre, finCiclo, fechaPago);
+      const pagoSinInt = Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso);
+      return [t.nombre, inicioCiclo, finCiclo, fechaPago, ciclo.intereses || 0, ciclo.pagoMinimo || 0,
+        gasto, diferidos, regulares, adelanto, pagoSinInt, reembolso, pagado, pagoSinInt - pagado];
     });
-    const totGasto = tarjetas.reduce((s, t) => { const c = ciclosMes[t.id] || {}; return s + calcularGastoCiclo(t.id, t.nombre, c.inicioCiclo, c.finCiclo).gasto; }, 0);
-    const totPagado = tarjetas.reduce((s, t) => s + ((ciclosMes[t.id] || {}).pagado || 0), 0);
-    const encabezado = [["Tarjetas de Crédito"], [`Mes: ${mesLabel(mesActual)}`], [`Usuario: ${userEmail || ""}`], [`Generado: ${fmtDate(todayISO())}`], []];
-    const csv = [...encabezado, headers, ...filas, ["", "", "", "", "", "TOTAL", totGasto, "", "", "", "", "", totPagado, ""]].map((r) => r.map(escape).join(",")).join("\n");
+    const enc = [["Tarjetas de Crédito"], [`Mes: ${mesLabel(mesActual)}`], [`Usuario: ${userEmail || ""}`], [`Generado: ${fmtDate(todayISO())}`], []];
+    const csv = [...enc, headers, ...filas].map((r) => r.map(escape).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = `TDC_${mesActual}.csv`;
@@ -1572,17 +1593,21 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
 
   function exportarPDF() {
     const filas = tarjetas.map((t) => {
-      const ciclo = ciclosMes[t.id] || {};
-      const { gasto, diferidos, regulares } = calcularGastoCiclo(t.id, t.nombre, ciclo.inicioCiclo, ciclo.finCiclo);
-      const pagoSinInt = calcularPagoSinIntereses(gasto, ciclo.intereses, ciclo.adelanto, ciclo.reembolso);
-      const restante = pagoSinInt - (ciclo.pagado || 0);
+      const { inicioCiclo, finCiclo, fechaPago } = fechasCiclo(t);
+      const { gasto, diferidos, regulares } = calcularGastoCiclo(t.nombre, inicioCiclo, finCiclo);
+      const ciclo = ciclosMes[t.nombre] || {};
+      const adelanto = calcularAdelanto(t.nombre, inicioCiclo, finCiclo);
+      const reembolso = calcularReembolso(t.nombre, inicioCiclo, finCiclo);
+      const pagado = calcularPagado(t.nombre, finCiclo, fechaPago);
+      const pagoSinInt = Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso);
+      const restante = pagoSinInt - pagado;
       return `<tr>
-        <td>${t.nombre}</td><td>${ciclo.inicioCiclo || "—"}</td><td>${ciclo.finCiclo || "—"}</td><td>${ciclo.fechaPago || "—"}</td>
-        <td class="num">${fmt(ciclo.intereses || 0)}</td><td class="num">${fmt(ciclo.pagoMinimo || 0)}</td>
+        <td>${t.nombre}</td><td>${inicioCiclo||"—"}</td><td>${finCiclo||"—"}</td><td>${fechaPago||"—"}</td>
+        <td class="num">${fmt(ciclo.intereses||0)}</td><td class="num">${fmt(ciclo.pagoMinimo||0)}</td>
         <td class="num">${fmt(gasto)}</td><td class="num">${fmt(diferidos)}</td><td class="num">${fmt(regulares)}</td>
-        <td class="num">${fmt(ciclo.adelanto || 0)}</td><td class="num">${fmt(pagoSinInt)}</td>
-        <td class="num">${fmt(ciclo.reembolso || 0)}</td><td class="num">${fmt(ciclo.pagado || 0)}</td>
-        <td class="num" style="color:${restante > 0 ? "#c62828" : "#2e7d32"}">${fmt(restante)}</td>
+        <td class="num">${fmt(adelanto)}</td><td class="num">${fmt(pagoSinInt)}</td>
+        <td class="num">${fmt(reembolso)}</td><td class="num">${fmt(pagado)}</td>
+        <td class="num" style="color:${restante>0?"#c62828":"#2e7d32"}">${fmt(restante)}</td>
       </tr>`;
     }).join("");
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TDC ${mesLabel(mesActual)}</title>
@@ -1590,69 +1615,71 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
       table{width:100%;border-collapse:collapse;font-size:8px;margin-top:12px}th,td{border:1px solid #999;padding:3px 4px}
       th{background:#F4CCCC;font-weight:700;text-align:left}td.num{text-align:right}@media print{body{padding:0}}</style></head>
       <body><h1>Tarjetas de Crédito — ${mesLabel(mesActual)}</h1>
-      <p class="sub">Usuario: ${userEmail || ""} · Generado el ${fmtDate(todayISO())}</p>
+      <p class="sub">Usuario: ${userEmail||""} · Generado el ${fmtDate(todayISO())}</p>
       <table><thead><tr><th>Tarjeta</th><th>Inicio</th><th>Corte</th><th>F.Pago</th>
         <th class="num">Intereses</th><th class="num">Pago Mín.</th><th class="num">Gasto</th>
         <th class="num">Diferidos</th><th class="num">Regulares</th><th class="num">Adelanto</th>
         <th class="num">Pago S/Int.</th><th class="num">Reembolso</th><th class="num">Pagado</th><th class="num">Restante</th>
       </tr></thead><tbody>${filas}</tbody></table>
       <script>window.onload=()=>{window.print();}</script></body></html>`;
-    const v = window.open("", "_blank"); if (v) { v.document.write(html); v.document.close(); }
+    const v = window.open("","_blank"); if(v){v.document.write(html);v.document.close();}
   }
 
   const inputSmall = { ...inputBase, fontSize: 12, padding: "5px 6px" };
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
-      {/* Selector de mes */}
       <Field label="Mes">
         <select value={mesActual} onChange={(e) => { setMesActual(e.target.value); setEditandoCicloId(null); }} style={{ ...inputBase, background: SHEET.azul }}>
           {mesesDisponibles.map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
         </select>
       </Field>
-
       <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
         <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 PDF</Btn>
         <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Excel</Btn>
       </div>
-
       {tarjetas.length === 0 && (
-        <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin tarjetas activas. Agrégalas desde Datos → Tarjetas.</p>
+        <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin tarjetas activas. Configúralas en Datos → Cuentas → TDC.</p>
       )}
-
       {tarjetas.map((t) => {
-        const ciclo = ciclosMes[t.id] || {};
-        const { gasto, diferidos, regulares } = calcularGastoCiclo(t.id, t.nombre, ciclo.inicioCiclo, ciclo.finCiclo);
-        const pagoSinInt = calcularPagoSinIntereses(gasto, ciclo.intereses, ciclo.adelanto, ciclo.reembolso);
-        const restante = pagoSinInt - (ciclo.pagado || 0);
-        const editando = editandoCicloId === t.id;
-
+        const { inicioCiclo, finCiclo, fechaPago } = fechasCiclo(t);
+        const { gasto, diferidos, regulares } = calcularGastoCiclo(t.nombre, inicioCiclo, finCiclo);
+        const ciclo = ciclosMes[t.nombre] || {};
+        const adelanto = calcularAdelanto(t.nombre, inicioCiclo, finCiclo);
+        const reembolso = calcularReembolso(t.nombre, inicioCiclo, finCiclo);
+        const pagado = calcularPagado(t.nombre, finCiclo, fechaPago);
+        const pagoSinInt = Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso);
+        const restante = pagoSinInt - pagado;
+        const editando = editandoCicloId === t.nombre;
         return (
-          <div key={t.id} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
-            {/* Header tarjeta */}
+          <div key={t.nombre} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
             <div style={{ background: SHEET.rosa, padding: "8px 12px", borderBottom: "1px solid " + SHEET.rosaBorde, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <p style={{ fontSize: 14, fontWeight: 700, fontStyle: "italic", margin: 0 }}>{t.nombre}</p>
-                <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>Límite {fmt(t.limite)} · {t.diasPago} días para pagar{t.anualidad ? " · Con anualidad" : ""}</p>
+                <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>
+                  Límite {fmt(t.limite)} · Corte día {t.diaCiclo}{t.anualidad ? " · Con anualidad" : ""}
+                  {ciclo.diasPago ? ` · ${ciclo.diasPago} días para pagar` : ""}
+                </p>
               </div>
               <button onClick={() => editando ? setEditandoCicloId(null) : abrirFormCiclo(t)} style={{
                 fontSize: 11, fontWeight: 700, fontStyle: "italic", padding: "5px 10px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
                 border: `1px solid ${SHEET.rosaBorde}`, background: editando ? SHEET.rosa : "#fff"
-              }}>{editando ? "Cancelar" : "✎ Editar ciclo"}</button>
+              }}>{editando ? "Cancelar" : "✎ Este mes"}</button>
             </div>
-
-            {/* Formulario de ciclo (edición) */}
+            {inicioCiclo && (
+              <div style={{ background: SHEET.azul, padding: "5px 12px", borderBottom: "1px solid " + SHEET.azulBorde }}>
+                <p style={{ fontSize: 11, fontStyle: "italic", color: "#333", margin: 0 }}>
+                  🗓 Ciclo: {inicioCiclo} → {finCiclo}
+                  {fechaPago ? ` · Pagar antes del ${fechaPago}` : " · Captura días de pago ↑"}
+                </p>
+              </div>
+            )}
             {editando && (
               <div style={{ background: SHEET.gris, padding: "10px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <Field label="Inicio de ciclo">
-                    <input type="date" value={formCiclo.inicioCiclo || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, inicioCiclo: e.target.value }))} style={inputSmall} />
-                  </Field>
-                  <Field label="Fin de ciclo / Corte">
-                    <input type="date" value={formCiclo.finCiclo || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, finCiclo: e.target.value }))} style={inputSmall} />
-                  </Field>
-                  <Field label="Fecha límite de pago">
-                    <input type="date" value={formCiclo.fechaPago || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, fechaPago: e.target.value }))} style={inputSmall} />
+                <p style={{ fontSize: 12, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Datos variables de este ciclo</p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                  <Field label="Días para pagar">
+                    <input type="number" inputMode="numeric" value={formCiclo.diasPago || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, diasPago: e.target.value }))} style={inputSmall} placeholder="Ej. 20" />
                   </Field>
                   <Field label="Pago mínimo">
                     <input type="number" inputMode="decimal" value={formCiclo.pagoMinimo || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, pagoMinimo: e.target.value }))} style={inputSmall} placeholder="$0" />
@@ -1660,81 +1687,72 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                   <Field label="Intereses cobrados">
                     <input type="number" inputMode="decimal" value={formCiclo.intereses || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, intereses: e.target.value }))} style={inputSmall} placeholder="$0" />
                   </Field>
-                  <Field label="Adelanto">
-                    <input type="number" inputMode="decimal" value={formCiclo.adelanto || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, adelanto: e.target.value }))} style={inputSmall} placeholder="$0" />
-                  </Field>
-                  <Field label="Reembolso">
-                    <input type="number" inputMode="decimal" value={formCiclo.reembolso || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, reembolso: e.target.value }))} style={inputSmall} placeholder="$0" />
-                  </Field>
-                  <Field label="Pagado">
-                    <input type="number" inputMode="decimal" value={formCiclo.pagado || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, pagado: e.target.value }))} style={inputSmall} placeholder="$0" />
-                  </Field>
                 </div>
-                <Btn primary full onClick={guardarCiclo} style={{ marginTop: 8 }}>Guardar ciclo</Btn>
+                <p style={{ fontSize: 11, color: "#666", fontStyle: "italic", margin: "6px 0 8px" }}>
+                  Adelanto, Pagado y Reembolso se calculan automático de tu Historial.
+                </p>
+                <Btn primary full onClick={() => guardarCiclo(t.nombre)}>Guardar</Btn>
               </div>
             )}
-
-            {/* Resumen del ciclo */}
             <div style={{ padding: "10px 12px", background: "#fff" }}>
-              {ciclo.inicioCiclo ? (
-                <>
-                  <p style={{ fontSize: 11, color: "#666", fontStyle: "italic", margin: "0 0 8px" }}>
-                    Ciclo: {ciclo.inicioCiclo} al {ciclo.finCiclo} · Pagar antes del {ciclo.fechaPago || "—"}
-                  </p>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5, marginBottom: 8 }}>
-                    <div><span style={{ color: "#777" }}>Gasto ciclo</span><br /><b>{fmt(gasto)}</b></div>
-                    <div><span style={{ color: "#777" }}>Diferidos</span><br /><b>{fmt(diferidos)}</b></div>
-                    <div><span style={{ color: "#777" }}>Regulares</span><br /><b>{fmt(regulares)}</b></div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5 }}>
-                    <div><span style={{ color: "#777" }}>Pago sin int.</span><br /><b>{fmt(pagoSinInt)}</b></div>
-                    <div><span style={{ color: "#777" }}>Pagado</span><br /><b style={{ color: SHEET.verdeBorde }}>{fmt(ciclo.pagado || 0)}</b></div>
-                    <div><span style={{ color: "#777" }}>Restante</span><br /><b style={{ color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(restante)}</b></div>
-                  </div>
-                  {(ciclo.intereses || 0) > 0 && (
-                    <p style={{ fontSize: 11, color: SHEET.rosaBorde, fontStyle: "italic", margin: "8px 0 0" }}>⚠ Intereses: {fmt(ciclo.intereses)}</p>
-                  )}
-                  {ciclo.pagoMinimo > 0 && (
-                    <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Pago mínimo: {fmt(ciclo.pagoMinimo)}</p>
-                  )}
-                </>
-              ) : (
-                <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin datos de ciclo para este mes. Toca "Editar ciclo" para capturar.</p>
-              )}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5, marginBottom: 8 }}>
+                <div><span style={{ color: "#777" }}>Gasto ciclo</span><br /><b>{fmt(gasto)}</b></div>
+                <div><span style={{ color: "#777" }}>Diferidos</span><br /><b>{fmt(diferidos)}</b></div>
+                <div><span style={{ color: "#777" }}>Regulares</span><br /><b>{fmt(regulares)}</b></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5, marginBottom: 8 }}>
+                <div><span style={{ color: "#777" }}>Adelanto</span><br /><b>{fmt(adelanto)}</b></div>
+                <div><span style={{ color: "#777" }}>Reembolso</span><br /><b>{fmt(reembolso)}</b></div>
+                <div><span style={{ color: "#777" }}>Pago sin int.</span><br /><b>{fmt(pagoSinInt)}</b></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11.5 }}>
+                <div><span style={{ color: "#777" }}>Pagado</span><br /><b style={{ color: SHEET.verdeBorde }}>{fmt(pagado)}</b></div>
+                <div><span style={{ color: "#777" }}>Restante</span><br /><b style={{ color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(restante)}</b></div>
+              </div>
+              {(ciclo.intereses || 0) > 0 && <p style={{ fontSize: 11, color: SHEET.rosaBorde, fontStyle: "italic", margin: "8px 0 0" }}>⚠ Intereses cobrados: {fmt(ciclo.intereses)}</p>}
+              {(ciclo.pagoMinimo || 0) > 0 && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Pago mínimo: {fmt(ciclo.pagoMinimo)}</p>}
+              {!inicioCiclo && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Configura el día de corte en Datos → Cuentas → TDC para ver las fechas.</p>}
             </div>
           </div>
         );
       })}
-
-      {/* Resumen global del mes */}
       {tarjetas.length > 0 && (
-        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginTop: 8 }}>
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
           <div style={{ background: SHEET.amarillo, padding: "7px 12px", borderBottom: "1px solid #e6d200" }}>
             <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>Resumen {mesLabel(mesActual)}</span>
           </div>
           <div style={{ padding: "10px 12px", background: "#fff" }}>
-            {["Gasto total", "Total diferidos", "Total regulares", "Total intereses", "Total pagado", "Total restante"].map((label, i) => {
-              const vals = tarjetas.map((t) => {
-                const ciclo = ciclosMes[t.id] || {};
-                const { gasto, diferidos, regulares } = calcularGastoCiclo(t.id, t.nombre, ciclo.inicioCiclo, ciclo.finCiclo);
-                const pagoSinInt = calcularPagoSinIntereses(gasto, ciclo.intereses, ciclo.adelanto, ciclo.reembolso);
-                return [gasto, diferidos, regulares, ciclo.intereses || 0, ciclo.pagado || 0, pagoSinInt - (ciclo.pagado || 0)][i];
+            {(() => {
+              let totGasto=0,totDif=0,totReg=0,totAd=0,totReem=0,totPagado=0,totRest=0,totInt=0;
+              tarjetas.forEach((t) => {
+                const {inicioCiclo,finCiclo,fechaPago} = fechasCiclo(t);
+                const {gasto,diferidos,regulares} = calcularGastoCiclo(t.nombre,inicioCiclo,finCiclo);
+                const ciclo = ciclosMes[t.nombre]||{};
+                const adelanto = calcularAdelanto(t.nombre,inicioCiclo,finCiclo);
+                const reembolso = calcularReembolso(t.nombre,inicioCiclo,finCiclo);
+                const pagado = calcularPagado(t.nombre,finCiclo,fechaPago);
+                const pagoSinInt = Math.max(0,gasto+(ciclo.intereses||0)+adelanto-reembolso);
+                totGasto+=gasto;totDif+=diferidos;totReg+=regulares;
+                totAd+=adelanto;totReem+=reembolso;totPagado+=pagado;
+                totRest+=pagoSinInt-pagado;totInt+=ciclo.intereses||0;
               });
-              const total = vals.reduce((s, v) => s + v, 0);
-              const isNeg = i === 5 && total > 0;
-              return (
-                <div key={label} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
-                  <span style={{ color: "#555" }}>{label}</span>
-                  <b style={{ color: isNeg ? SHEET.rosaBorde : "#333" }}>{fmt(total)}</b>
+              return [["Gasto total",totGasto,false],["Total diferidos",totDif,false],["Total regulares",totReg,false],
+                ["Total intereses",totInt,true],["Total adelantos",totAd,false],["Total pagado",totPagado,false],
+                ["Total restante",totRest,totRest>0]
+              ].map(([label,val,isRed]) => (
+                <div key={label} style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5}}>
+                  <span style={{color:"#555"}}>{label}</span>
+                  <b style={{color:isRed?SHEET.rosaBorde:"#333"}}>{fmt(val)}</b>
                 </div>
-              );
-            })}
+              ));
+            })()}
           </div>
         </div>
       )}
     </div>
   );
 }
+
 
 function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
   const [section, setSection] = useState("cuentas");
