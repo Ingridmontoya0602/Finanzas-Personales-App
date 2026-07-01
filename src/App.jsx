@@ -3132,11 +3132,13 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
   );
 }
 
-function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail }) {
+function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferido, userEmail }) {
   const [pagandoId, setPagandoId] = useState(null);
   const [montoPago, setMontoPago] = useState("");
   const [interesesPago, setInteresesPago] = useState("");
   const [fechaPago, setFechaPago] = useState(todayISO());
+  const [editandoId, setEditandoId] = useState(null);
+  const [formEdit, setFormEdit] = useState({});
 
   const activos = diferidos.filter((d) => d.activo);
   const inactivos = diferidos.filter((d) => !d.activo);
@@ -3156,6 +3158,33 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
     setPagandoId(null);
   }
 
+  function abrirEdicion(d) {
+    setEditandoId(d.id);
+    setPagandoId(null);
+    setFormEdit({
+      nombre: d.nombre || "",
+      costoTotal: String(d.costoTotal),
+      plazoMeses: String(d.plazoMeses),
+      pagos: String(d.pagos),
+      pagado: String(d.pagado),
+      interesesPagados: String(d.interesesPagados || 0),
+      descripcion: d.descripcion || "",
+    });
+  }
+
+  function confirmarEdicion(id) {
+    editarDiferido(id, {
+      nombre: formEdit.nombre,
+      costoTotal: parseFloat(formEdit.costoTotal) || 0,
+      plazoMeses: parseInt(formEdit.plazoMeses) || 1,
+      pagos: parseInt(formEdit.pagos) || 0,
+      pagado: parseFloat(formEdit.pagado) || 0,
+      interesesPagados: parseFloat(formEdit.interesesPagados) || 0,
+      descripcion: formEdit.descripcion,
+    });
+    setEditandoId(null);
+  }
+
   function Tarjeta({ d }) {
     const capitalPendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
     const interesesPagados = d.interesesPagados || 0;
@@ -3172,6 +3201,7 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
             <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>{d.tarjeta} · desde {fmtDate(d.inicio)}</p>
           </div>
           <button aria-label="Eliminar" onClick={() => eliminarDiferido(d.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, padding: 2, flexShrink: 0 }}>✕</button>
+          <button aria-label="Editar" onClick={() => editandoId === d.id ? setEditandoId(null) : abrirEdicion(d)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.azulBorde, padding: 2, flexShrink: 0, fontSize: 14 }}>✎</button>
         </div>
 
         {/* Capital */}
@@ -3190,6 +3220,44 @@ function DiferidosTab({ diferidos, registrarPago, eliminarDiferido, userEmail })
         <p style={{ fontSize: 11.5, margin: "8px 0 0", fontStyle: "italic" }}>
           Pago {d.pagos} / {d.plazoMeses} · Mensualidad {fmt(d.aportacion)}{d.ultPago ? ` · Últ. pago ${fmtDate(d.ultPago)}` : ""}
         </p>
+
+        {editandoId === d.id && (
+          <div style={{ marginTop: 8, padding: "10px", background: SHEET.azul, borderRadius: 3, border: `1px solid ${SHEET.azulBorde}` }}>
+            <p style={{ fontSize: 12, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Editar diferido</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <Field label="Nombre">
+                <input type="text" value={formEdit.nombre || ""} onChange={(e) => setFormEdit((p) => ({ ...p, nombre: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+              </Field>
+              <Field label="Capital total">
+                <input type="number" inputMode="decimal" value={formEdit.costoTotal || ""} onChange={(e) => setFormEdit((p) => ({ ...p, costoTotal: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+              </Field>
+              <Field label="Plazo (meses)">
+                <input type="number" inputMode="numeric" value={formEdit.plazoMeses || ""} onChange={(e) => setFormEdit((p) => ({ ...p, plazoMeses: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+              </Field>
+              <Field label="Pagos realizados">
+                <input type="number" inputMode="numeric" value={formEdit.pagos || ""} onChange={(e) => setFormEdit((p) => ({ ...p, pagos: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+              </Field>
+              <Field label="Capital pagado ($)">
+                <input type="number" inputMode="decimal" value={formEdit.pagado || ""} onChange={(e) => setFormEdit((p) => ({ ...p, pagado: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+              </Field>
+              <Field label="Intereses pagados acum. ($)">
+                <input type="number" inputMode="decimal" value={formEdit.interesesPagados || ""} onChange={(e) => setFormEdit((p) => ({ ...p, interesesPagados: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} placeholder="0" />
+              </Field>
+            </div>
+            <Field label="Descripción">
+              <input type="text" value={formEdit.descripcion || ""} onChange={(e) => setFormEdit((p) => ({ ...p, descripcion: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+            </Field>
+            {formEdit.costoTotal && formEdit.plazoMeses && (
+              <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 8px" }}>
+                Nueva mensualidad: {fmt(Math.round((parseFloat(formEdit.costoTotal) / parseInt(formEdit.plazoMeses)) * 100) / 100)}
+              </p>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <Btn primary full onClick={() => confirmarEdicion(d.id)}>Guardar cambios</Btn>
+              <Btn full onClick={() => setEditandoId(null)}>Cancelar</Btn>
+            </div>
+          </div>
+        )}
 
         {d.activo && (
           pagandoId === d.id ? (
@@ -4739,6 +4807,28 @@ export default function App() {
     guardarCatalogoAhora(actualizado);
   }
 
+  function editarDiferido(id, campos) {
+    const actualizado = {
+      ...catalogRef.current,
+      diferidos: (catalogRef.current.diferidos || []).map((d) => {
+        if (d.id !== id) return d;
+        const costoTotal = campos.costoTotal !== undefined ? campos.costoTotal : d.costoTotal;
+        const plazoMeses = campos.plazoMeses !== undefined ? campos.plazoMeses : d.plazoMeses;
+        const pagos = campos.pagos !== undefined ? campos.pagos : d.pagos;
+        const pagado = campos.pagado !== undefined ? campos.pagado : d.pagado;
+        const interesesPagados = campos.interesesPagados !== undefined ? campos.interesesPagados : (d.interesesPagados || 0);
+        return {
+          ...d, ...campos,
+          costoTotal, plazoMeses, pagos, pagado, interesesPagados,
+          aportacion: Math.round((costoTotal / plazoMeses) * 100) / 100,
+          activo: pagos < plazoMeses
+        };
+      })
+    };
+    setCatalog(actualizado);
+    guardarCatalogoAhora(actualizado);
+  }
+
   async function registrarPagoDiferido(diferidoId, monto, fecha, intereses = 0) {
     const dif = (catalogRef.current.diferidos || []).find((d) => d.id === diferidoId);
     if (!dif) return;
@@ -4889,7 +4979,7 @@ export default function App() {
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "presupuesto" && <PresupuestoTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} movimientos={movimientos} />}
-      {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
+      {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} editarDiferido={editarDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
       {tab === "tdc" && <TDCTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "servicios" && <ServiciosTab servicios={catalog.servicios || []} toggleActiva={toggleActivaServicioApp} movimientos={movimientos} userEmail={session.user.email} />}
