@@ -71,13 +71,7 @@ const DEFAULT_CATALOG = {
     "Reembolso": ["TDC", "TDD"],
     "Otro(a)": ["Otro(a)"]
   },
-  presupuestos: {
-    "Comidas": 0, "Compras Online": 0, "Educación": 0, "Entretenimiento": 0,
-    "Gastos Personales": 0, "Intereses TDC": 0, "Mascotas": 0, "Otro(a)": 0,
-    "Regalos y Festejos": 0, "Ropa y Accesorios": 0, "Salud y Bienestar": 0,
-    "Supermercado": 0, "Tecnología": 0, "Tienda de Conveniencia": 0,
-    "Transporte": 0, "Viajes y Vacaciones": 0, "Vivienda": 0
-  },
+  presupuestosMensuales: {},
   membresias: [],
   seguros: [],
   servicios: [],
@@ -243,7 +237,8 @@ function TabBar({ tab, setTab, onLogout }) {
   const tabs = [
     { id: "registrar", label: "Registro", icon: "+" },
     { id: "resumen", label: "Reporte", icon: "▤" },
-    { id: "historial", label: "Historial", icon: "≡" }
+    { id: "historial", label: "Historial", icon: "≡" },
+    { id: "presupuesto", label: "Presupuesto", icon: "₱" }
   ];
   const menuItems = [
     { id: "diferidos", label: "Diferidos TDC" },
@@ -699,8 +694,14 @@ function ResumenTab({ movimientos, catalog }) {
     movsMes.filter((m) => m.mov === "Egreso" && m.tipo === "G. Variable").forEach((m) => { map[m.categoria] = (map[m.categoria] || 0) + m.cantidad; });
     return map;
   }, [movsMes]);
-  const presupuestoRows = Object.keys(catalog.presupuestos).map((cat) => {
-    const presupuesto = catalog.presupuestos[cat] || 0;
+  const presupuestoMes = (catalog.presupuestosMensuales || {})[mesFiltro] || {};
+  const presupuestoCats = presupuestoMes.categorias || {};
+  const catVariables = ["Comidas", "Compras Online", "Educación", "Entretenimiento", "Gastos Personales",
+    "Intereses TDC", "Mascotas", "Otro(a)", "Regalos y Festejos", "Ropa y Accesorios",
+    "Salud y Bienestar", "Supermercado", "Tecnología", "Tienda de Conveniencia",
+    "Transporte", "Viajes y Vacaciones", "Vivienda"];
+  const presupuestoRows = catVariables.map((cat) => {
+    const presupuesto = presupuestoCats[cat] || 0;
     const usado = porCategoria[cat] || 0;
     const disponible = presupuesto - usado;
     const pct = presupuesto > 0 ? Math.min(100, (usado / presupuesto) * 100) : (usado > 0 ? 100 : 0);
@@ -870,7 +871,448 @@ function ListEditor({ title, items, onAdd, onRemove }) {
   );
 }
 
-function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
+const CAT_VARIABLES = ["Comidas", "Compras Online", "Educación", "Entretenimiento", "Gastos Personales",
+  "Intereses TDC", "Mascotas", "Otro(a)", "Regalos y Festejos", "Ropa y Accesorios",
+  "Salud y Bienestar", "Supermercado", "Tecnología", "Tienda de Conveniencia",
+  "Transporte", "Viajes y Vacaciones", "Vivienda"];
+
+const MESES_LABEL = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+function mesLabel(ym) {
+  const [y, m] = ym.split("-");
+  return `${MESES_LABEL[parseInt(m, 10) - 1]} ${y}`;
+}
+
+function mesAnterior(ym) {
+  const d = new Date(ym + "-01");
+  d.setMonth(d.getMonth() - 1);
+  return d.toISOString().slice(0, 7);
+}
+
+function calcFijosDelMes(catalog) {
+  const fijosCat = {};
+  // G. Fijo: Membresías activas
+  (catalog.membresias || []).filter((m) => m.activa).forEach((m) => { fijosCat["Membresías"] = (fijosCat["Membresías"] || 0) + (m.costo || 0); });
+  // G. Fijo: Servicios activos
+  (catalog.servicios || []).filter((s) => s.activa).forEach((s) => { if (!s.esVariable) fijosCat["Servicios"] = (fijosCat["Servicios"] || 0) + (s.costo || 0); });
+  // G. Fijo: Seguros activos
+  (catalog.seguros || []).filter((s) => s.activa).forEach((s) => { fijosCat["Seguros"] = (fijosCat["Seguros"] || 0) + (s.costo || 0); });
+  // Préstamos bancarios activos
+  (catalog.prestamosBancarios || []).filter((p) => p.activa).forEach((p) => { fijosCat["Préstamos Bancario/Crédito"] = (fijosCat["Préstamos Bancario/Crédito"] || 0) + (p.pagoPeriodo || 0); });
+  // Ahorro activo
+  (catalog.ahorros || []).filter((a) => a.activa).forEach((a) => { fijosCat["Ahorro"] = (fijosCat["Ahorro"] || 0) + (a.aportacion || 0); });
+  // Inversión activa
+  (catalog.inversiones || []).filter((i) => i.activa).forEach((i) => { fijosCat["Inversión"] = (fijosCat["Inversión"] || 0) + (i.aportacion || 0); });
+  // Familia aportación activa
+  (catalog.familiares || []).filter((f) => f.activa).forEach((f) => { fijosCat["Familia (Aportación)"] = (fijosCat["Familia (Aportación)"] || 0) + (f.aportacion || 0); });
+  // Diferidos activos
+  (catalog.diferidos || []).filter((d) => d.activo).forEach((d) => { fijosCat["Diferidos TDC"] = (fijosCat["Diferidos TDC"] || 0) + (d.aportacion || 0); });
+  return fijosCat;
+}
+
+function PresupuestoEditor({ catalog, setCatalog, guardarAhora, movimientos }) {
+  const today = todayISO().slice(0, 7);
+  const mesesDisponibles = useMemo(() => {
+    const set = new Set(movimientos.map((m) => m.fecha.slice(0, 7)));
+    set.add(today);
+    return Array.from(set).sort();
+  }, [movimientos, today]);
+
+  const ultimoConDatos = useMemo(() => {
+    const conMov = mesesDisponibles.filter((m) => movimientos.some((mv) => mv.fecha.startsWith(m)));
+    return conMov.length > 0 ? conMov[conMov.length - 1] : today;
+  }, [mesesDisponibles, movimientos, today]);
+
+  const [mesActual, setMesActual] = useState(ultimoConDatos);
+  const [mostrarReal, setMostrarReal] = useState(false);
+
+  const todosMeses = useMemo(() => {
+    const year = new Date().getFullYear();
+    return Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, "0")}`);
+  }, []);
+
+  const presupuestosMens = catalog.presupuestosMensuales || {};
+  const datosMes = presupuestosMens[mesActual] || {};
+  const catsMes = datosMes.categorias || {};
+  const ingresoMes = datosMes.ingresoEsperado || 0;
+
+  const mesAnt = mesAnterior(mesActual);
+  const datosAnt = presupuestosMens[mesAnt] || {};
+  const catsAnt = datosAnt.categorias || {};
+
+  // Promedio histórico por categoría (de movimientos reales)
+  const promedios = useMemo(() => {
+    const sumas = {}; const conteos = {};
+    movimientos.filter((m) => m.mov === "Egreso" && m.tipo === "G. Variable").forEach((m) => {
+      const mes = m.fecha.slice(0, 7);
+      if (!sumas[m.categoria]) { sumas[m.categoria] = {}; conteos[m.categoria] = new Set(); }
+      sumas[m.categoria][mes] = (sumas[m.categoria][mes] || 0) + Number(m.cantidad);
+      conteos[m.categoria].add(mes);
+    });
+    const result = {};
+    Object.keys(sumas).forEach((cat) => {
+      const total = Object.values(sumas[cat]).reduce((s, v) => s + v, 0);
+      result[cat] = conteos[cat].size > 0 ? Math.round((total / conteos[cat].size) * 100) / 100 : 0;
+    });
+    return result;
+  }, [movimientos]);
+
+  // Real del mes anterior (lo que gastó)
+  const realAnt = useMemo(() => {
+    const map = {};
+    movimientos.filter((m) => m.mov === "Egreso" && m.tipo === "G. Variable" && m.fecha.startsWith(mesAnt))
+      .forEach((m) => { map[m.categoria] = (map[m.categoria] || 0) + Number(m.cantidad); });
+    return map;
+  }, [movimientos, mesAnt]);
+
+  const fijosMes = useMemo(() => calcFijosDelMes(catalog), [catalog]);
+  const totalFijos = Object.values(fijosMes).reduce((s, v) => s + v, 0);
+  const totalVariablePresup = CAT_VARIABLES.reduce((s, cat) => s + (catsMes[cat] || 0), 0);
+  const totalPresupuestado = totalFijos + totalVariablePresup;
+  const diferencia = ingresoMes - totalPresupuestado;
+
+  function actualizarCat(cat, valor) {
+    const nuevo = {
+      ...presupuestosMens,
+      [mesActual]: {
+        ...datosMes,
+        categorias: { ...catsMes, [cat]: parseFloat(valor) || 0 }
+      }
+    };
+    const actualizado = { ...catalog, presupuestosMensuales: nuevo };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function actualizarIngreso(valor) {
+    const nuevo = {
+      ...presupuestosMens,
+      [mesActual]: { ...datosMes, ingresoEsperado: parseFloat(valor) || 0 }
+    };
+    const actualizado = { ...catalog, presupuestosMensuales: nuevo };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  function copiarDelAnterior() {
+    if (!datosAnt || !datosAnt.categorias) return;
+    const nuevo = {
+      ...presupuestosMens,
+      [mesActual]: {
+        ingresoEsperado: datosAnt.ingresoEsperado || 0,
+        categorias: { ...datosAnt.categorias }
+      }
+    };
+    const actualizado = { ...catalog, presupuestosMensuales: nuevo };
+    setCatalog(actualizado);
+    guardarAhora(actualizado);
+  }
+
+  const colHeaderStyle = { fontSize: 10.5, fontWeight: 700, fontStyle: "italic", color: "#555", textAlign: "right", padding: "0 4px" };
+  const cellStyle = { fontSize: 11.5, textAlign: "right", padding: "4px 4px", color: "#444" };
+  const labelStyle = { fontSize: 12.5, fontWeight: 700, padding: "4px 0" };
+
+  function FilaFija({ label, monto }) {
+    return (
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 70px 70px 90px", gap: 4, alignItems: "center", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+        <span style={{ fontSize: 12, color: "#555" }}>{label}</span>
+        <span style={cellStyle}>—</span>
+        <span style={cellStyle}>—</span>
+        {mostrarReal ? <span style={cellStyle}>—</span> : null}
+        <span style={{ ...cellStyle, fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(monto)}</span>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      {/* Selector de mes */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+        <div style={{ flex: 1 }}>
+          <Field label="Mes a editar">
+            <select value={mesActual} onChange={(e) => setMesActual(e.target.value)} style={{ ...inputBase, fontWeight: 700 }}>
+              {todosMeses.map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+            </select>
+          </Field>
+        </div>
+        {datosAnt.categorias && (
+          <button onClick={copiarDelAnterior} style={{
+            marginTop: 18, padding: "8px 10px", fontSize: 11, fontWeight: 700, fontStyle: "italic",
+            border: `1px solid ${SHEET.azulBorde}`, borderRadius: 3, background: SHEET.azul, cursor: "pointer", fontFamily: SHEET.fuente
+          }}>↩ Copiar mes ant.</button>
+        )}
+      </div>
+
+      {/* Toggle real anterior */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+        <button onClick={() => setMostrarReal((v) => !v)} style={{
+          fontSize: 11, fontWeight: 700, fontStyle: "italic", padding: "5px 10px", borderRadius: 3,
+          border: `1px solid ${SHEET.grisBorde}`, background: mostrarReal ? SHEET.amarillo : "#fff", cursor: "pointer", fontFamily: SHEET.fuente
+        }}>{mostrarReal ? "▲ Ocultar real anterior" : "▼ Ver real anterior"}</button>
+      </div>
+
+      {/* Encabezados */}
+      <div style={{ display: "grid", gridTemplateColumns: `1fr 70px 70px ${mostrarReal ? "70px " : ""}90px`, gap: 4, padding: "4px 8px", borderBottom: `2px solid ${SHEET.grisBorde}` }}>
+        <span style={{ fontSize: 11, fontWeight: 700, fontStyle: "italic" }}>Categoría</span>
+        <span style={colHeaderStyle}>A Prom.</span>
+        <span style={colHeaderStyle}>B Base</span>
+        {mostrarReal && <span style={colHeaderStyle}>C Real ant.</span>}
+        <span style={{ ...colHeaderStyle, color: SHEET.rosaBorde }}>D Este mes</span>
+      </div>
+
+      {/* Ingreso esperado */}
+      <div style={{ background: SHEET.verde, padding: "6px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+        <div style={{ display: "grid", gridTemplateColumns: `1fr 70px 70px ${mostrarReal ? "70px " : ""}90px`, gap: 4, alignItems: "center" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700 }}>Ingreso esperado</span>
+          <span style={cellStyle}>{promedios["_ingreso"] ? fmt(promedios["_ingreso"]) : "—"}</span>
+          <span style={cellStyle}>{datosAnt.ingresoEsperado ? fmt(datosAnt.ingresoEsperado) : "—"}</span>
+          {mostrarReal && <span style={cellStyle}>—</span>}
+          <input type="number" inputMode="decimal" value={ingresoMes || ""} onChange={(e) => actualizarIngreso(e.target.value)}
+            placeholder="$0" style={{ ...inputBase, textAlign: "right", border: `2px solid ${SHEET.verdeBorde}`, fontSize: 12, padding: "4px 6px" }} />
+        </div>
+      </div>
+
+      {/* G. Variable (editable) */}
+      <div style={{ background: SHEET.rosa, padding: "5px 8px", borderBottom: "1px solid " + SHEET.rosaBorde }}>
+        <span style={labelStyle}>Gasto Variable</span>
+      </div>
+      {CAT_VARIABLES.map((cat) => (
+        <div key={cat} style={{ display: "grid", gridTemplateColumns: `1fr 70px 70px ${mostrarReal ? "70px " : ""}90px`, gap: 4, alignItems: "center", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+          <span style={{ fontSize: 12 }}>{cat}</span>
+          <span style={cellStyle}>{promedios[cat] ? fmt(promedios[cat]) : "—"}</span>
+          <span style={cellStyle}>{catsAnt[cat] ? fmt(catsAnt[cat]) : "—"}</span>
+          {mostrarReal && <span style={{ ...cellStyle, color: realAnt[cat] > (catsAnt[cat] || 0) ? SHEET.rosaBorde : "#444" }}>{realAnt[cat] ? fmt(realAnt[cat]) : "—"}</span>}
+          <input type="number" inputMode="decimal" value={catsMes[cat] || ""} onChange={(e) => actualizarCat(cat, e.target.value)}
+            placeholder="$0" style={{ ...inputBase, textAlign: "right", border: `2px solid ${SHEET.rojo}`, fontSize: 12, padding: "4px 6px" }} />
+        </div>
+      ))}
+
+      {/* G. Fijo (no editable) */}
+      <div style={{ background: SHEET.azul, padding: "5px 8px", borderBottom: "1px solid " + SHEET.azulBorde, marginTop: 8 }}>
+        <span style={labelStyle}>Comprometido (no editable)</span>
+      </div>
+      {Object.entries(fijosMes).map(([label, monto]) => (
+        <FilaFija key={label} label={label} monto={monto} />
+      ))}
+      {Object.keys(fijosMes).length === 0 && (
+        <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", padding: "8px" }}>Sin compromisos fijos activos.</p>
+      )}
+
+      {/* Resumen */}
+      <div style={{ marginTop: 14, border: `1px solid ${SHEET.grisBorde}`, borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ background: SHEET.amarillo, padding: "8px 12px", borderBottom: `1px solid ${SHEET.grisBorde}` }}>
+          <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", margin: 0 }}>Resumen {mesLabel(mesActual)}</p>
+        </div>
+        <div style={{ padding: "10px 12px", background: "#fff" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+            <span>Ingreso esperado</span><b style={{ color: SHEET.verdeBorde }}>{fmt(ingresoMes)}</b>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+            <span>Comprometido (fijo)</span><b style={{ color: SHEET.rosaBorde }}>− {fmt(totalFijos)}</b>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+            <span>Variable presupuestado</span><b style={{ color: SHEET.rosaBorde }}>− {fmt(totalVariablePresup)}</b>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderTop: `1px solid ${SHEET.grisBorde}`, paddingTop: 8, marginTop: 4 }}>
+            <b>Disponible estimado</b>
+            <b style={{ color: diferencia >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(diferencia)}</b>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PresupuestoTab({ catalog, movimientos, userEmail }) {
+  const today = todayISO().slice(0, 7);
+  const [mesFiltro, setMesFiltro] = useState(today);
+
+  const meses = useMemo(() => {
+    const set = new Set(movimientos.map((m) => m.fecha.slice(0, 7)));
+    set.add(today);
+    return Array.from(set).sort().reverse();
+  }, [movimientos, today]);
+
+  const presupuestosMens = catalog.presupuestosMensuales || {};
+  const datosMes = presupuestosMens[mesFiltro] || {};
+  const catsMes = datosMes.categorias || {};
+  const ingresoEsperado = datosMes.ingresoEsperado || 0;
+
+  const movsMes = useMemo(() => movimientos.filter((m) => m.fecha.startsWith(mesFiltro)), [movimientos, mesFiltro]);
+  const ingresoReal = movsMes.filter((m) => m.mov === "Ingreso").reduce((s, m) => s + Number(m.cantidad), 0);
+  const egresoReal = movsMes.filter((m) => m.mov === "Egreso").reduce((s, m) => s + Number(m.cantidad), 0);
+
+  const gastoVariableReal = useMemo(() => {
+    const map = {};
+    movsMes.filter((m) => m.mov === "Egreso" && m.tipo === "G. Variable").forEach((m) => { map[m.categoria] = (map[m.categoria] || 0) + Number(m.cantidad); });
+    return map;
+  }, [movsMes]);
+
+  const fijosMes = useMemo(() => calcFijosDelMes(catalog), [catalog]);
+  const totalFijos = Object.values(fijosMes).reduce((s, v) => s + v, 0);
+  const totalVariablePresup = CAT_VARIABLES.reduce((s, cat) => s + (catsMes[cat] || 0), 0);
+  const totalVariableReal = CAT_VARIABLES.reduce((s, cat) => s + (gastoVariableReal[cat] || 0), 0);
+  const totalPresupuestado = totalFijos + totalVariablePresup;
+  const balance = ingresoEsperado - totalPresupuestado;
+
+  const semaforo = balance >= 0 ? { color: SHEET.verdeBorde, label: "✓ En orden", bg: SHEET.verde } :
+    balance >= -2000 ? { color: SHEET.amarilloBorde, label: "⚠ Ajustado", bg: SHEET.amarillo } :
+    { color: SHEET.rosaBorde, label: "✕ Déficit", bg: SHEET.rosa };
+
+  function exportarCSV() {
+    const escape = (v) => { const s = String(v ?? ""); return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s; };
+    const filas = [
+      ["Presupuesto", mesLabel(mesFiltro)],
+      [`Usuario: ${userEmail || ""}`],
+      [`Generado: ${fmtDate(todayISO())}`],
+      [],
+      ["Categoría", "Presupuestado", "Real", "Diferencia"],
+      ["Ingreso esperado", ingresoEsperado, ingresoReal, ingresoReal - ingresoEsperado],
+      [],
+      ["── G. Variable ──"],
+      ...CAT_VARIABLES.map((cat) => [cat, catsMes[cat] || 0, gastoVariableReal[cat] || 0, (catsMes[cat] || 0) - (gastoVariableReal[cat] || 0)]),
+      ["Total Variable", totalVariablePresup, totalVariableReal, totalVariablePresup - totalVariableReal],
+      [],
+      ["── Comprometido (Fijo) ──"],
+      ...Object.entries(fijosMes).map(([label, monto]) => [label, monto, "", ""]),
+      ["Total Fijo", totalFijos, "", ""],
+      [],
+      ["TOTAL PRESUPUESTADO", totalPresupuestado, egresoReal, totalPresupuestado - egresoReal],
+      ["DISPONIBLE ESTIMADO", balance, "", ""],
+    ];
+    const csv = filas.map((r) => r.map(escape).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = `Presupuesto_${mesFiltro}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
+  function exportarPDF() {
+    const variableFilas = CAT_VARIABLES.map((cat) => {
+      const presup = catsMes[cat] || 0;
+      const real = gastoVariableReal[cat] || 0;
+      const dif = presup - real;
+      if (presup === 0 && real === 0) return "";
+      return `<tr>
+        <td>${cat}</td><td class="num">${fmt(presup)}</td><td class="num">${fmt(real)}</td>
+        <td class="num" style="color:${dif >= 0 ? "#2e7d32" : "#c62828"}">${fmt(dif)}</td>
+      </tr>`;
+    }).filter(Boolean).join("");
+    const fijoFilas = Object.entries(fijosMes).map(([l, m]) =>
+      `<tr><td>${l}</td><td class="num">${fmt(m)}</td><td>—</td><td>—</td></tr>`).join("");
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Presupuesto ${mesLabel(mesFiltro)}</title>
+      <style>body{font-family:Calibri,Arial,sans-serif;padding:24px}h1{font-size:20px;margin:0 0 4px}h2{font-size:13px;margin:16px 0 6px}
+      p.sub{font-size:12px;color:#555;margin:0 0 4px}
+      table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:14px}th,td{border:1px solid #999;padding:5px 6px}
+      th{background:#F4CCCC;font-weight:700}td.num{text-align:right}
+      .semaforo{display:inline-block;padding:6px 14px;border-radius:4px;font-weight:700;font-size:13px;margin:10px 0}
+      .resumen{background:#FFF9C4;border:1px solid #e6d200;border-radius:4px;padding:10px 14px;font-size:12px}
+      .resumen div{display:flex;justify-content:space-between;margin-bottom:4px}
+      @media print{body{padding:0}}</style></head>
+      <body>
+        <h1>Presupuesto — ${mesLabel(mesFiltro)}</h1>
+        <p class="sub">Usuario: ${userEmail || ""} · Generado el ${fmtDate(todayISO())}</p>
+        <div class="semaforo" style="background:${semaforo.bg};color:${semaforo.color}">${semaforo.label}</div>
+        <div class="resumen">
+          <div><span>Ingreso esperado</span><b>${fmt(ingresoEsperado)}</b></div>
+          <div><span>Comprometido (fijo)</span><b>− ${fmt(totalFijos)}</b></div>
+          <div><span>Variable presupuestado</span><b>− ${fmt(totalVariablePresup)}</b></div>
+          <div style="border-top:1px solid #ccc;padding-top:6px;margin-top:4px"><span><b>Disponible estimado</b></span><b style="color:${semaforo.color}">${fmt(balance)}</b></div>
+        </div>
+        <h2>Gasto Variable</h2>
+        <table><thead><tr><th>Categoría</th><th>Presupuestado</th><th>Real</th><th>Diferencia</th></tr></thead>
+        <tbody>${variableFilas}</tbody></table>
+        <h2>Comprometido (Fijo)</h2>
+        <table><thead><tr><th>Concepto</th><th>Monto</th><th colspan="2"></th></tr></thead>
+        <tbody>${fijoFilas}</tbody></table>
+        <script>window.onload=()=>{window.print();}</script>
+      </body></html>`;
+    const v = window.open("", "_blank"); if (v) { v.document.write(html); v.document.close(); }
+  }
+
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      <Field label="Mes">
+        <select value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} style={{ ...inputBase, background: SHEET.azul }}>
+          {meses.map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
+        </select>
+      </Field>
+
+      {/* Semáforo */}
+      <div style={{ background: semaforo.bg, border: `1px solid ${semaforo.color}`, borderRadius: 4, padding: "10px 14px", marginBottom: 14, textAlign: "center" }}>
+        <p style={{ fontSize: 15, fontWeight: 700, margin: 0, color: semaforo.color }}>{semaforo.label}</p>
+        <p style={{ fontSize: 12, color: "#555", margin: "4px 0 0" }}>
+          Ingreso {fmt(ingresoEsperado)} − Comprometido {fmt(totalFijos)} − Variable {fmt(totalVariablePresup)} = <b style={{ color: semaforo.color }}>{fmt(balance)}</b>
+        </p>
+      </div>
+
+      {/* Botones export */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+        <Btn full onClick={exportarPDF} style={{ flex: 1 }}>📄 PDF</Btn>
+        <Btn full onClick={exportarCSV} style={{ flex: 1 }}>📊 Excel</Btn>
+      </div>
+
+      {/* G. Variable */}
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ background: SHEET.rosa, padding: "7px 12px", borderBottom: "1px solid " + SHEET.rosaBorde }}>
+          <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>Gasto Variable</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", gap: 0, background: SHEET.gris, borderBottom: "1px solid " + SHEET.grisBorde, padding: "4px 10px" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, fontStyle: "italic", color: "#555" }}>Categoría</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, fontStyle: "italic", color: "#555", textAlign: "right" }}>Presup.</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, fontStyle: "italic", color: "#555", textAlign: "right" }}>Real</span>
+        </div>
+        {CAT_VARIABLES.map((cat) => {
+          const presup = catsMes[cat] || 0;
+          const real = gastoVariableReal[cat] || 0;
+          if (presup === 0 && real === 0) return null;
+          const over = real > presup && presup > 0;
+          const pct = presup > 0 ? Math.min(100, (real / presup) * 100) : (real > 0 ? 100 : 0);
+          return (
+            <div key={cat} style={{ padding: "7px 10px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", gap: 0, marginBottom: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>{cat}</span>
+                <span style={{ fontSize: 12, textAlign: "right", color: "#555" }}>{fmt(presup)}</span>
+                <span style={{ fontSize: 12, textAlign: "right", fontWeight: 700, color: over ? SHEET.rosaBorde : "#333" }}>{fmt(real)}</span>
+              </div>
+              {presup > 0 && (
+                <div style={{ height: 7, background: SHEET.gris, border: "1px solid " + SHEET.grisBorde, borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: over ? SHEET.rosaBorde : pct >= 80 ? SHEET.amarilloBorde : SHEET.verdeBorde }} />
+                </div>
+              )}
+            </div>
+          );
+        }).filter(Boolean)}
+        {CAT_VARIABLES.every((cat) => !(catsMes[cat] || 0) && !gastoVariableReal[cat]) && (
+          <p style={{ fontSize: 12, color: "#888", fontStyle: "italic", padding: "10px" }}>Sin presupuesto ni gastos en este mes. Configúralo en Datos → Presupuesto.</p>
+        )}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", padding: "6px 10px", background: SHEET.gris, borderTop: "1px solid " + SHEET.grisBorde }}>
+          <span style={{ fontSize: 12, fontWeight: 700 }}>Total Variable</span>
+          <span style={{ fontSize: 12, fontWeight: 700, textAlign: "right" }}>{fmt(totalVariablePresup)}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, textAlign: "right", color: totalVariableReal > totalVariablePresup ? SHEET.rosaBorde : "#333" }}>{fmt(totalVariableReal)}</span>
+        </div>
+      </div>
+
+      {/* Comprometido */}
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ background: SHEET.azul, padding: "7px 12px", borderBottom: "1px solid " + SHEET.azulBorde }}>
+          <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>Comprometido (Fijo)</span>
+        </div>
+        {Object.entries(fijosMes).map(([label, monto]) => (
+          <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "7px 10px", borderBottom: "1px solid " + SHEET.grisBorde, fontSize: 12 }}>
+            <span>{label}</span><b>{fmt(monto)}</b>
+          </div>
+        ))}
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", background: SHEET.gris, fontSize: 12, fontWeight: 700 }}>
+          <span>Total Fijo</span><span>{fmt(totalFijos)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
   const [section, setSection] = useState("cuentas");
   function addToList(path, value) {
     const next = JSON.parse(JSON.stringify(catalog));
@@ -2189,21 +2631,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora }) {
       {section === "lugares" && <ListEditor title="Lugares frecuentes" items={catalog.lugares} onAdd={(v) => addToList(["lugares"], v)} onRemove={(v) => removeFromList(["lugares"], v)} />}
 
       {section === "presupuestos" && (
-        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-          <HeaderBand color={SHEET.rosa} borderColor={SHEET.rosaBorde}>Presupuesto mensual por categoría</HeaderBand>
-          <div style={{ background: "#fff", padding: "12px 14px" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {Object.keys(catalog.presupuestos).map((cat, i) => (
-                <div key={cat} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 8px", background: i % 2 === 0 ? "#fff" : SHEET.gris }}>
-                  <span style={{ fontSize: 13, fontWeight: 700 }}>{cat}</span>
-                  <input type="number" value={catalog.presupuestos[cat]}
-                    onChange={(e) => { const v = parseFloat(e.target.value) || 0; setCatalog((prev) => ({ ...prev, presupuestos: { ...prev.presupuestos, [cat]: v } })); }}
-                    style={{ ...inputBase, width: 110, textAlign: "right", border: `2px solid ${SHEET.rojo}` }} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <PresupuestoEditor catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarAhora} movimientos={movimientos} />
       )}
     </div>
   );
@@ -3923,7 +4351,8 @@ export default function App() {
       {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} />}
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
-      {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} />}
+      {tab === "presupuesto" && <PresupuestoTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} movimientos={movimientos} />}
       {tab === "diferidos" && <DiferidosTab diferidos={catalog.diferidos || []} registrarPago={registrarPagoDiferido} eliminarDiferido={eliminarDiferido} userEmail={session.user.email} />}
       {tab === "membresias" && <MembresiasTab membresias={catalog.membresias || []} toggleActiva={toggleActivaMembresiaApp} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "servicios" && <ServiciosTab servicios={catalog.servicios || []} toggleActiva={toggleActivaServicioApp} movimientos={movimientos} userEmail={session.user.email} />}
