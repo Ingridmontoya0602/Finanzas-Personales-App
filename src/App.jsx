@@ -1488,6 +1488,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
   const [mesActual, setMesActual] = useState(today);
   const [editandoCicloId, setEditandoCicloId] = useState(null);
   const [formCiclo, setFormCiclo] = useState({});
+  const [verDiferidosId, setVerDiferidosId] = useState(null);
 
   const ciclosTDC = catalog.ciclosTDC || {};
   const ciclosMes = ciclosTDC[mesActual] || {};
@@ -1504,6 +1505,8 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
     return { inicioCiclo, finCiclo, fechaPago };
   }
 
+  const r2 = (n) => Math.round(n * 100) / 100;
+
   function calcularGastoCiclo(tarjetaNombre, inicioCiclo, finCiclo) {
     if (!inicioCiclo || !finCiclo) return { gasto: 0, diferidos: 0, regulares: 0 };
     const movsCiclo = movimientos.filter((m) =>
@@ -1511,17 +1514,17 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
       m.fecha >= inicioCiclo && m.fecha <= finCiclo &&
       m.tipo !== "Pago TDC"
     );
-    const diferidos = movsCiclo.filter((m) => m.lugar && m.lugar.startsWith("__diferido:")).reduce((s, m) => s + Number(m.cantidad), 0);
-    const gasto = movsCiclo.reduce((s, m) => s + Number(m.cantidad), 0);
-    return { gasto, diferidos, regulares: gasto - diferidos };
+    const diferidos = r2(movsCiclo.filter((m) => m.lugar && m.lugar.startsWith("__diferido:")).reduce((s, m) => s + Number(m.cantidad), 0));
+    const gasto = r2(movsCiclo.reduce((s, m) => s + Number(m.cantidad), 0));
+    return { gasto, diferidos, regulares: r2(gasto - diferidos) };
   }
 
   function calcularAdelanto(tarjetaNombre, inicioCiclo, finCiclo) {
     if (!inicioCiclo || !finCiclo) return 0;
-    return movimientos.filter((m) =>
+    return r2(movimientos.filter((m) =>
       m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === tarjetaNombre &&
       m.fecha >= inicioCiclo && m.fecha <= finCiclo
-    ).reduce((s, m) => s + Number(m.cantidad), 0);
+    ).reduce((s, m) => s + Number(m.cantidad), 0));
   }
 
   function calcularPagado(tarjetaNombre, finCiclo, fechaPago) {
@@ -1529,18 +1532,27 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
     const d = new Date(finCiclo); d.setDate(d.getDate() + 1);
     const desde = d.toISOString().slice(0, 10);
     const hasta = fechaPago || "9999-12-31";
-    return movimientos.filter((m) =>
+    return r2(movimientos.filter((m) =>
       m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === tarjetaNombre &&
       m.fecha >= desde && m.fecha <= hasta
-    ).reduce((s, m) => s + Number(m.cantidad), 0);
+    ).reduce((s, m) => s + Number(m.cantidad), 0));
   }
 
   function calcularReembolso(tarjetaNombre, inicioCiclo, finCiclo) {
     if (!inicioCiclo || !finCiclo) return 0;
-    return movimientos.filter((m) =>
+    return r2(movimientos.filter((m) =>
       m.mov === "Ingreso" && m.ingresoTipo === "Reembolso" && m.cuenta === tarjetaNombre &&
       m.fecha >= inicioCiclo && m.fecha <= finCiclo
-    ).reduce((s, m) => s + Number(m.cantidad), 0);
+    ).reduce((s, m) => s + Number(m.cantidad), 0));
+  }
+
+  // Diferidos activos de una tarjeta: saldo pendiente total
+  function diferidosActivosDe(tarjetaNombre) {
+    return (catalog.diferidos || []).filter((d) => d.activo && d.cuenta === tarjetaNombre);
+  }
+
+  function saldoPendienteDiferido(dif) {
+    return r2(Math.max(0, dif.total - (dif.pagado || 0)));
   }
 
   function abrirFormCiclo(tdc) {
@@ -1648,11 +1660,16 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
         const adelanto = calcularAdelanto(t.nombre, inicioCiclo, finCiclo);
         const reembolso = calcularReembolso(t.nombre, inicioCiclo, finCiclo);
         const pagado = calcularPagado(t.nombre, finCiclo, fechaPago);
-        const pagoSinInt = Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso);
-        const restante = pagoSinInt - pagado;
+        const pagoSinInt = r2(Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso));
+        const restante = r2(pagoSinInt - pagado);
         const editando = editandoCicloId === t.nombre;
+        const difActivos = diferidosActivosDe(t.nombre);
+        const totalDifPendiente = r2(difActivos.reduce((s, d) => s + saldoPendienteDiferido(d), 0));
+        const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - restante));
+        const verDifs = verDiferidosId === t.nombre;
         return (
           <div key={t.nombre} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
+            {/* Header */}
             <div style={{ background: SHEET.rosa, padding: "8px 12px", borderBottom: "1px solid " + SHEET.rosaBorde, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <p style={{ fontSize: 14, fontWeight: 700, fontStyle: "italic", margin: 0 }}>{t.nombre}</p>
@@ -1666,6 +1683,34 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                 border: `1px solid ${SHEET.rosaBorde}`, background: editando ? SHEET.rosa : "#fff"
               }}>{editando ? "Cancelar" : "✎ Este mes"}</button>
             </div>
+
+            {/* Disponible real */}
+            <div style={{ background: disponible > 0 ? SHEET.verde : SHEET.rosa, padding: "6px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>
+                  Disponible real: <span style={{ color: disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(disponible)}</span>
+                  <span style={{ fontWeight: 400, color: "#555", fontSize: 11 }}> = {fmt(t.limite)} − {fmt(totalDifPendiente)} difs − {fmt(restante)} restante</span>
+                </span>
+                {difActivos.length > 0 && (
+                  <button onClick={() => setVerDiferidosId(verDifs ? null : t.nombre)} style={{
+                    fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "3px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                    border: "1px solid " + SHEET.grisBorde, background: verDifs ? SHEET.amarillo : "#fff"
+                  }}>{verDifs ? "▲ Ocultar difs" : `▼ Ver difs (${difActivos.length})`}</button>
+                )}
+              </div>
+              {verDifs && (
+                <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid " + SHEET.grisBorde }}>
+                  {difActivos.map((dif) => (
+                    <div key={dif.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                      <span style={{ color: "#444" }}>{dif.nombre} · {dif.numPagos - (dif.pagos || 0)} pagos restantes</span>
+                      <b style={{ color: SHEET.rosaBorde }}>{fmt(saldoPendienteDiferido(dif))}</b>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Fechas ciclo */}
             {inicioCiclo && (
               <div style={{ background: SHEET.azul, padding: "5px 12px", borderBottom: "1px solid " + SHEET.azulBorde }}>
                 <p style={{ fontSize: 11, fontStyle: "italic", color: "#333", margin: 0 }}>
@@ -1674,6 +1719,8 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                 </p>
               </div>
             )}
+
+            {/* Formulario mensual */}
             {editando && (
               <div style={{ background: SHEET.gris, padding: "10px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
                 <p style={{ fontSize: 12, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Datos variables de este ciclo</p>
@@ -1694,10 +1741,12 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                 <Btn primary full onClick={() => guardarCiclo(t.nombre)}>Guardar</Btn>
               </div>
             )}
+
+            {/* Resumen ciclo */}
             <div style={{ padding: "10px 12px", background: "#fff" }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5, marginBottom: 8 }}>
                 <div><span style={{ color: "#777" }}>Gasto ciclo</span><br /><b>{fmt(gasto)}</b></div>
-                <div><span style={{ color: "#777" }}>Diferidos</span><br /><b>{fmt(diferidos)}</b></div>
+                <div><span style={{ color: "#777" }}>Diferidos ciclo</span><br /><b>{fmt(diferidos)}</b></div>
                 <div><span style={{ color: "#777" }}>Regulares</span><br /><b>{fmt(regulares)}</b></div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5, marginBottom: 8 }}>
@@ -1731,7 +1780,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                 const adelanto = calcularAdelanto(t.nombre,inicioCiclo,finCiclo);
                 const reembolso = calcularReembolso(t.nombre,inicioCiclo,finCiclo);
                 const pagado = calcularPagado(t.nombre,finCiclo,fechaPago);
-                const pagoSinInt = Math.max(0,gasto+(ciclo.intereses||0)+adelanto-reembolso);
+                const pagoSinInt = r2(Math.max(0,gasto+(ciclo.intereses||0)+adelanto-reembolso));
                 totGasto+=gasto;totDif+=diferidos;totReg+=regulares;
                 totAd+=adelanto;totReem+=reembolso;totPagado+=pagado;
                 totRest+=pagoSinInt-pagado;totInt+=ciclo.intereses||0;
