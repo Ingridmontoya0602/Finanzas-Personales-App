@@ -243,15 +243,15 @@ function TabBar({ tab, setTab, onLogout }) {
     { id: "presupuesto", label: "Presupuesto", icon: "₱" }
   ];
   const menuItems = [
-    { id: "diferidos", label: "Diferidos TDC" },
-    { id: "tdc", label: "Tarjetas de Crédito" },
-    { id: "membresias", label: "Membresías" },
-    { id: "servicios", label: "Servicios" },
-    { id: "seguros", label: "Seguros" },
-    { id: "prestamos", label: "Préstamos" },
-    { id: "familia", label: "Familia" },
     { id: "ahorro", label: "Ahorro" },
+    { id: "diferidos", label: "Diferidos TDC" },
+    { id: "familia", label: "Familia" },
     { id: "inversion", label: "Inversión" },
+    { id: "membresias", label: "Membresías" },
+    { id: "prestamos", label: "Préstamos" },
+    { id: "seguros", label: "Seguros" },
+    { id: "servicios", label: "Servicios" },
+    { id: "tdc", label: "Tarjetas de Crédito" },
     { id: "catalogos", label: "Datos" }
   ];
   const enMenu = menuItems.some((m) => m.id === tab);
@@ -326,6 +326,8 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [nombreDiferido, setNombreDiferido] = useState("");
   const [pagosPrevios, setPagosPrevios] = useState("");
   const [pagadoPrevio, setPagadoPrevio] = useState("");
+  const [conIntereses, setConIntereses] = useState(false);
+  const [mensualidadFija, setMensualidadFija] = useState("");
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -341,7 +343,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   useEffect(() => { setIngresoPersonaTercero(""); }, [ingresoSub]);
   useEffect(() => { if (metodo !== "TDC") setEsDiferido(false); }, [metodo]);
   useEffect(() => { if (mov !== "Egreso") setEsDiferido(false); }, [mov]);
-  useEffect(() => { setPagosPrevios(""); setPagadoPrevio(""); }, [plazoMeses]);
+  useEffect(() => { setPagosPrevios(""); setPagadoPrevio(""); setMensualidadFija(""); }, [plazoMeses]);
 
   function reset() {
     setMetodo(""); setCuenta(""); setTipo(""); setCategoria(""); setSubcategoria("");
@@ -378,11 +380,17 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
     const amt = parseFloat(cantidad);
     if (esDiferido) {
       const plazo = parseInt(plazoMeses);
+      // Con intereses: costoTotal = mensualidadFija × plazo, el capital (amt) es solo referencia
+      // Sin intereses: costoTotal = amt (el capital), mensualidad = amt / plazo
+      const mensual = conIntereses && mensualidadFija ? parseFloat(mensualidadFija) : 0;
+      const costoTotal = conIntereses && mensual > 0 ? Math.round(mensual * plazo * 100) / 100 : amt;
+      const prevAmt = pagadoPrevio ? parseFloat(pagadoPrevio) : 0;
       await addDiferido({
         nombre: nombreDiferido, tarjeta: cuenta, categoria, subcategoria, descripcion,
-        costoTotal: amt, plazoMeses: plazo, inicio: fecha,
+        costoTotal, capitalOriginal: amt, conIntereses, mensualidadFija: mensual || 0,
+        plazoMeses: plazo, inicio: fecha,
         pagosPrevios: pagosPrevios ? parseInt(pagosPrevios) : 0,
-        pagadoPrevio: pagadoPrevio ? parseFloat(pagadoPrevio) : 0
+        pagadoPrevio: prevAmt
       });
     } else {
       const entry = {
@@ -480,15 +488,41 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                   onChange={(e) => { setPlazoMeses(e.target.value); setErrors((p) => ({ ...p, plazoMeses: false })); }}
                   style={selStyle(errors.plazoMeses)} />
               </Field>
+              <Field label="¿Lleva intereses?">
+                <div style={{ display: "flex", gap: 6 }}>
+                  {[["Sí", true], ["No (sin intereses)", false]].map(([label, val]) => (
+                    <button key={label} onClick={() => { setConIntereses(val); setMensualidadFija(""); }} style={{
+                      flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
+                      border: conIntereses === val ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
+                      background: conIntereses === val ? SHEET.azul : "#fff"
+                    }}>{label}</button>
+                  ))}
+                </div>
+              </Field>
+              {conIntereses && (
+                <Field label="Mensualidad fija (lo que pagas cada mes, ya con intereses incluidos)">
+                  <input type="number" inputMode="decimal" value={mensualidadFija} onChange={(e) => setMensualidadFija(e.target.value)} style={inputBase} placeholder="Ej. $1,215.69" />
+                  {mensualidadFija && plazoMeses && parseFloat(mensualidadFija) > 0 && parseInt(plazoMeses) > 0 && (
+                    <div style={{ background: SHEET.amarillo, border: "1px solid #e6d200", borderRadius: 4, padding: "7px 10px", marginTop: 6, fontSize: 12 }}>
+                      <p style={{ margin: "0 0 2px" }}><b>Total a pagar:</b> {fmt(Math.round(parseFloat(mensualidadFija) * parseInt(plazoMeses) * 100) / 100)}</p>
+                      {cantidad && parseFloat(cantidad) > 0 && (
+                        <p style={{ margin: 0, color: "#666" }}>Intereses totales implícitos: {fmt(Math.round((parseFloat(mensualidadFija) * parseInt(plazoMeses) - parseFloat(cantidad)) * 100) / 100)}</p>
+                      )}
+                    </div>
+                  )}
+                </Field>
+              )}
               {plazoMeses && parseInt(plazoMeses) > 1 && (
                 <>
                   <Field label="¿Ya venías pagando este diferido? (opcional)">
                     <select value={pagosPrevios} onChange={(e) => {
                       const n = e.target.value;
                       setPagosPrevios(n);
-                      const mensualidad = cantidad && parseFloat(cantidad) > 0 && parseInt(plazoMeses) > 0
-                        ? parseFloat(cantidad) / parseInt(plazoMeses) : 0;
-                      setPagadoPrevio(n ? String(Math.round(mensualidad * parseInt(n) * 100) / 100) : "");
+                      const mensual = conIntereses && mensualidadFija && parseFloat(mensualidadFija) > 0
+                        ? parseFloat(mensualidadFija)
+                        : (cantidad && parseFloat(cantidad) > 0 && parseInt(plazoMeses) > 0
+                          ? parseFloat(cantidad) / parseInt(plazoMeses) : 0);
+                      setPagadoPrevio(n ? String(Math.round(mensual * parseInt(n) * 100) / 100) : "");
                     }} style={inputBase}>
                       <option value="">No, es nuevo — empiezo desde el pago 1</option>
                       {Array.from({ length: parseInt(plazoMeses) - 1 }, (_, i) => i + 1).map((n) => (
@@ -1655,7 +1689,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
 
   function exportarCSV() {
     const escape = (v) => { const s = String(v ?? ""); return s.includes(",") || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s; };
-    const headers = ["Tarjeta", "Inicio Ciclo", "Fin Ciclo", "Fecha Límite Pago", "Intereses", "Pago Mín.", "Gasto Ciclo", "Diferidos", "Regulares", "Adelanto", "Pago Sin Int.", "Reembolso", "Pagado", "Restante"];
+    const headers = ["Tarjeta", "Límite", "Difs. Pendiente Total", "Disponible Real", "Inicio Ciclo", "Fin Ciclo", "F.Pago", "Intereses", "Pago Mín.", "Gasto Ciclo", "Difs. Ciclo", "Regulares", "Adelanto", "Pago Sin Int.", "Reembolso", "Pagado", "Restante"];
     const filas = tarjetas.map((t) => {
       const { inicioCiclo, finCiclo, fechaPago } = fechasCiclo(t);
       const { gasto, diferidos, regulares } = calcularGastoCiclo(t.nombre, inicioCiclo, finCiclo);
@@ -1663,9 +1697,14 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
       const adelanto = calcularAdelanto(t.nombre, inicioCiclo, finCiclo);
       const reembolso = calcularReembolso(t.nombre, inicioCiclo, finCiclo);
       const pagado = calcularPagado(t.nombre, finCiclo, fechaPago);
-      const pagoSinInt = Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso);
-      return [t.nombre, inicioCiclo, finCiclo, fechaPago, ciclo.intereses || 0, ciclo.pagoMinimo || 0,
-        gasto, diferidos, regulares, adelanto, pagoSinInt, reembolso, pagado, pagoSinInt - pagado];
+      const pagoSinInt = r2(Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso));
+      const restante = r2(pagoSinInt - pagado);
+      const difActivos = diferidosActivosDe(t.nombre);
+      const totalDifPendiente = r2(difActivos.reduce((s, d) => s + saldoPendienteDiferido(d), 0));
+      const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - restante));
+      return [t.nombre, t.limite || 0, totalDifPendiente, disponible,
+        inicioCiclo, finCiclo, fechaPago, ciclo.intereses || 0, ciclo.pagoMinimo || 0,
+        gasto, diferidos, regulares, adelanto, pagoSinInt, reembolso, pagado, restante];
     });
     const enc = [["Tarjetas de Crédito"], [`Mes: ${mesLabel(mesActual)}`], [`Usuario: ${userEmail || ""}`], [`Generado: ${fmtDate(todayISO())}`], []];
     const csv = [...enc, headers, ...filas].map((r) => r.map(escape).join(",")).join("\n");
@@ -1676,15 +1715,18 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
   }
 
   function exportarPDF() {
-    const filas = tarjetas.map((t) => {
+    const filasCiclo = tarjetas.map((t) => {
       const { inicioCiclo, finCiclo, fechaPago } = fechasCiclo(t);
       const { gasto, diferidos, regulares } = calcularGastoCiclo(t.nombre, inicioCiclo, finCiclo);
       const ciclo = ciclosMes[t.nombre] || {};
       const adelanto = calcularAdelanto(t.nombre, inicioCiclo, finCiclo);
       const reembolso = calcularReembolso(t.nombre, inicioCiclo, finCiclo);
       const pagado = calcularPagado(t.nombre, finCiclo, fechaPago);
-      const pagoSinInt = Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso);
-      const restante = pagoSinInt - pagado;
+      const pagoSinInt = r2(Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso));
+      const restante = r2(pagoSinInt - pagado);
+      const difActivos = diferidosActivosDe(t.nombre);
+      const totalDifPendiente = r2(difActivos.reduce((s, d) => s + saldoPendienteDiferido(d), 0));
+      const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - restante));
       return `<tr>
         <td>${t.nombre}</td><td>${inicioCiclo||"—"}</td><td>${finCiclo||"—"}</td><td>${fechaPago||"—"}</td>
         <td class="num">${fmt(ciclo.intereses||0)}</td><td class="num">${fmt(ciclo.pagoMinimo||0)}</td>
@@ -1694,17 +1736,53 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
         <td class="num" style="color:${restante>0?"#c62828":"#2e7d32"}">${fmt(restante)}</td>
       </tr>`;
     }).join("");
+
+    // Tabla resumen de límites y disponible
+    const filasResumen = tarjetas.map((t) => {
+      const { finCiclo, fechaPago } = fechasCiclo(t);
+      const { gasto } = calcularGastoCiclo(t.nombre, fechasCiclo(t).inicioCiclo, finCiclo);
+      const ciclo = ciclosMes[t.nombre] || {};
+      const adelanto = calcularAdelanto(t.nombre, fechasCiclo(t).inicioCiclo, finCiclo);
+      const reembolso = calcularReembolso(t.nombre, fechasCiclo(t).inicioCiclo, finCiclo);
+      const pagado = calcularPagado(t.nombre, finCiclo, fechaPago);
+      const pagoSinInt = r2(Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso));
+      const restante = r2(pagoSinInt - pagado);
+      const difActivos = diferidosActivosDe(t.nombre);
+      const totalDifPendiente = r2(difActivos.reduce((s, d) => s + saldoPendienteDiferido(d), 0));
+      const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - restante));
+      const pctUsado = t.limite > 0 ? Math.round(((t.limite - disponible) / t.limite) * 100) : 0;
+      return `<tr>
+        <td>${t.nombre}</td>
+        <td class="num">${fmt(t.limite || 0)}</td>
+        <td class="num" style="color:#c62828">${fmt(totalDifPendiente)}</td>
+        <td class="num" style="color:${restante>0?"#c62828":"#555"}">${fmt(restante)}</td>
+        <td class="num" style="color:${disponible<=0?"#c62828":"#2e7d32"};font-weight:700">${fmt(disponible)}</td>
+        <td class="num">${pctUsado}% usado</td>
+      </tr>`;
+    }).join("");
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TDC ${mesLabel(mesActual)}</title>
-      <style>body{font-family:Calibri,Arial,sans-serif;padding:24px}h1{font-size:18px;margin:0 0 4px}p.sub{font-size:11px;color:#555;margin:0 0 4px}
-      table{width:100%;border-collapse:collapse;font-size:8px;margin-top:12px}th,td{border:1px solid #999;padding:3px 4px}
-      th{background:#F4CCCC;font-weight:700;text-align:left}td.num{text-align:right}@media print{body{padding:0}}</style></head>
+      <style>body{font-family:Calibri,Arial,sans-serif;padding:24px}h1{font-size:18px;margin:0 0 4px}h2{font-size:13px;margin:18px 0 6px;color:#333}
+      p.sub{font-size:11px;color:#555;margin:0 0 4px}
+      table{width:100%;border-collapse:collapse;font-size:8px;margin-bottom:6px}th,td{border:1px solid #999;padding:3px 4px}
+      th{background:#F4CCCC;font-weight:700;text-align:left}td.num{text-align:right}
+      .resumen th{background:#FFF2CC}
+      @media print{body{padding:0}}</style></head>
       <body><h1>Tarjetas de Crédito — ${mesLabel(mesActual)}</h1>
       <p class="sub">Usuario: ${userEmail||""} · Generado el ${fmtDate(todayISO())}</p>
+
+      <h2>Límites y Disponible</h2>
+      <table class="resumen"><thead><tr>
+        <th>Tarjeta</th><th class="num">Límite</th><th class="num">Difs. Pendiente</th>
+        <th class="num">Restante ciclo</th><th class="num">Disponible Real</th><th class="num">Uso</th>
+      </tr></thead><tbody>${filasResumen}</tbody></table>
+
+      <h2>Detalle del Ciclo</h2>
       <table><thead><tr><th>Tarjeta</th><th>Inicio</th><th>Corte</th><th>F.Pago</th>
         <th class="num">Intereses</th><th class="num">Pago Mín.</th><th class="num">Gasto</th>
-        <th class="num">Diferidos</th><th class="num">Regulares</th><th class="num">Adelanto</th>
+        <th class="num">Difs.</th><th class="num">Regulares</th><th class="num">Adelanto</th>
         <th class="num">Pago S/Int.</th><th class="num">Reembolso</th><th class="num">Pagado</th><th class="num">Restante</th>
-      </tr></thead><tbody>${filas}</tbody></table>
+      </tr></thead><tbody>${filasCiclo}</tbody></table>
       <script>window.onload=()=>{window.print();}</script></body></html>`;
     const v = window.open("","_blank"); if(v){v.document.write(html);v.document.close();}
   }
@@ -3261,6 +3339,7 @@ function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferi
     const capitalPendiente = Math.round((d.costoTotal - d.pagado) * 100) / 100;
     const interesesPagados = d.interesesPagados || 0;
     const totalRealPagado = Math.round((d.pagado + interesesPagados) * 100) / 100;
+    const interesesTotalesImplicitos = d.conIntereses && d.capitalOriginal ? Math.round((d.costoTotal - d.capitalOriginal) * 100) / 100 : 0;
     return (
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "7px 10px", marginBottom: 6, background: d.activo ? "#fff" : SHEET.gris }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
@@ -3278,14 +3357,27 @@ function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferi
           </div>
         </div>
 
-        {/* Datos en una sola fila compacta */}
+        {/* Capital */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, marginTop: 6, fontSize: 11 }}>
-          <div><span style={{ color: "#777" }}>Capital</span><br /><b>{fmt(d.costoTotal)}</b></div>
-          <div><span style={{ color: "#777" }}>Pagado</span><br /><b>{fmt(d.pagado)}</b></div>
+          {d.conIntereses && d.capitalOriginal ? (
+            <div><span style={{ color: "#777" }}>Capital</span><br /><b>{fmt(d.capitalOriginal)}</b></div>
+          ) : (
+            <div><span style={{ color: "#777" }}>Capital</span><br /><b>{fmt(d.costoTotal)}</b></div>
+          )}
+          {d.conIntereses ? (
+            <div><span style={{ color: "#777" }}>Total c/int.</span><br /><b>{fmt(d.costoTotal)}</b></div>
+          ) : (
+            <div><span style={{ color: "#777" }}>Pagado</span><br /><b>{fmt(d.pagado)}</b></div>
+          )}
           <div><span style={{ color: "#777" }}>Pendiente</span><br /><b style={{ color: capitalPendiente > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(capitalPendiente)}</b></div>
           <div><span style={{ color: "#777" }}>Intereses</span><br /><b style={{ color: interesesPagados > 0 ? SHEET.rosaBorde : "#555" }}>{fmt(interesesPagados)}</b></div>
           <div><span style={{ color: "#777" }}>Total real</span><br /><b>{fmt(totalRealPagado)}</b></div>
         </div>
+        {d.conIntereses && interesesTotalesImplicitos > 0 && (
+          <p style={{ fontSize: 10.5, color: "#888", fontStyle: "italic", margin: "3px 0 0" }}>
+            Intereses totales del crédito: {fmt(interesesTotalesImplicitos)} · Mensualidad: {fmt(d.mensualidadFija || d.aportacion)}
+          </p>
+        )}
 
         <p style={{ fontSize: 11, margin: "4px 0 0", fontStyle: "italic", color: "#555" }}>
           Pago {d.pagos}/{d.plazoMeses} · {fmt(d.aportacion)}/mes{d.ultPago ? ` · Últ. ${fmtDate(d.ultPago)}` : ""}
@@ -4890,13 +4982,22 @@ export default function App() {
     }
   }
 
-  function addDiferido({ nombre, tarjeta, categoria, subcategoria, descripcion, costoTotal, plazoMeses, inicio, pagosPrevios = 0, pagadoPrevio = 0 }) {
+  function addDiferido({ nombre, tarjeta, categoria, subcategoria, descripcion, costoTotal, capitalOriginal, conIntereses, mensualidadFija, plazoMeses, inicio, pagosPrevios = 0, pagadoPrevio = 0 }) {
     const pagosIniciales = Math.min(Math.max(0, pagosPrevios), plazoMeses - 1);
     const pagadoInicial = Math.max(0, pagadoPrevio);
+    // Si lleva intereses, la aportación ES la mensualidad fija; costoTotal ya viene calculado (mensual × plazo)
+    // Si no lleva intereses, aportación = costoTotal / plazo
+    const aportacion = conIntereses && mensualidadFija > 0
+      ? Math.round(mensualidadFija * 100) / 100
+      : Math.round((costoTotal / plazoMeses) * 100) / 100;
     const nuevo = {
-      id: uid(), activo: pagosIniciales < plazoMeses, nombre: nombre || "", tarjeta, categoria, subcategoria: subcategoria || "", descripcion: descripcion || "",
-      costoTotal, plazoMeses, aportacion: Math.round((costoTotal / plazoMeses) * 100) / 100,
-      pagos: pagosIniciales, pagado: pagadoInicial, ultPago: "", inicio
+      id: uid(), activo: pagosIniciales < plazoMeses, nombre: nombre || "", tarjeta,
+      categoria, subcategoria: subcategoria || "", descripcion: descripcion || "",
+      costoTotal, capitalOriginal: capitalOriginal || costoTotal,
+      conIntereses: conIntereses || false, mensualidadFija: mensualidadFija || 0,
+      plazoMeses, aportacion,
+      pagos: pagosIniciales, pagado: pagadoInicial,
+      interesesPagados: 0, ultPago: "", inicio
     };
     const actualizado = { ...catalogRef.current, diferidos: [nuevo, ...(catalogRef.current.diferidos || [])] };
     setCatalog(actualizado);
