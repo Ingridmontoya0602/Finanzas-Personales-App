@@ -1761,88 +1761,88 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
         </div>
       </div>
 
-      {/* Alerta Flujo de Efectivo + Margen en grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 18, minWidth: 0 }}>
-        {/* Alerta Flujo */}
-        <div style={{ minWidth: 0, overflow: "hidden" }}>
-          <p style={tituloStyle}>Alerta (Flujo de Efectivo)</p>
-          <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 55px 55px 58px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3 }}>
-              {["Concepto", "Prom.", "Mes", "Restante"].map((h, i) => (
-                <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
-              ))}
-            </div>
-            {[
-              { label: "Flujo Mínimo", prom: totalFijos, mes: flujoMinimo, rest: restanteFijosMes },
-              { label: "Deuda TDC", prom: promedioTDCMensual, mes: deudaTDCMes, rest: deudaTDCMes },
-              { label: "Familia", prom: aportacionFamilia, mes: aportacionFamilia, rest: restanteFamiliaMes },
-              { label: "Préstamos", prom: aportacionPrestamos, mes: aportacionPrestamos, rest: restantePrestaMes },
-              { label: "Ahorro", prom: aportacionAhorro, mes: aportacionAhorro, rest: restanteAhorroMes },
-              { label: "Inversión", prom: aportacionInversion, mes: aportacionInversion, rest: restanteInversionMes },
-            ].map((row) => (
-              <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1fr 55px 55px 58px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3 }}>
-                <span style={{ fontSize: 11 }}>{row.label}</span>
-                <span style={{ fontSize: 10, textAlign: "right", color: "#aaa" }}>{row.prom > 0 ? fmt(row.prom) : "—"}</span>
-                <span style={{ fontSize: 10, textAlign: "right" }}>{row.mes > 0 ? fmt(row.mes) : "—"}</span>
-                <span style={{ fontSize: 10, textAlign: "right", fontWeight: 700, color: row.rest > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{row.rest > 0 ? fmt(row.rest) : "✓"}</span>
-              </div>
+      {/* Alerta Flujo de Efectivo */}
+      <div style={seccionStyle}>
+        <p style={tituloStyle}>Alerta (Flujo de Efectivo)</p>
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 90px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+            {["Concepto", "Promedio", "Este mes", "Restante"].map((h, i) => (
+              <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
             ))}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 55px 55px 58px", padding: "4px 8px", background: SHEET.gris, gap: 3, borderTop: "1px solid " + SHEET.grisBorde }}>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Total</span>
-              <span style={{ fontSize: 10, textAlign: "right", fontWeight: 700, color: "#aaa" }}>{fmt(totalFijos + promedioTDCMensual + aportacionFamilia + aportacionPrestamos + aportacionAhorro + aportacionInversion)}</span>
-              <span style={{ fontSize: 10, textAlign: "right", fontWeight: 700 }}>{fmt(flujoMinimo + deudaTDCMes + aportacionFamilia + aportacionPrestamos + aportacionAhorro + aportacionInversion)}</span>
-              <span style={{ fontSize: 10, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(restanteFijosMes + deudaTDCMes + restanteFamiliaMes + restantePrestaMes + restanteAhorroMes + restanteInversionMes)}</span>
+          </div>
+          {[
+            { label: "Flujo Mínimo", prom: totalFijos, mes: flujoMinimo, rest: restanteFijosMes },
+            { label: "Deuda TDC", prom: promedioTDCMensual, mes: deudaTDCMes, rest: deudaTDCMes },
+            { label: "Familia", prom: aportacionFamilia, mes: aportacionFamilia, rest: restanteFamiliaMes },
+            { label: "Préstamos", prom: aportacionPrestamos, mes: aportacionPrestamos, rest: restantePrestaMes },
+            { label: "Ahorro", prom: aportacionAhorro, mes: aportacionAhorro, rest: restanteAhorroMes },
+            { label: "Inversión", prom: aportacionInversion, mes: aportacionInversion, rest: restanteInversionMes },
+          ].map((row) => (
+            <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 90px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <span style={{ fontSize: 11 }}>{row.label}</span>
+              <span style={{ fontSize: 11, textAlign: "right", color: "#aaa", display: "block", minWidth: 0 }}>{row.prom > 0 ? fmt(row.prom) : "—"}</span>
+              <span style={{ fontSize: 11, textAlign: "right", display: "block", minWidth: 0 }}>{row.mes > 0 ? fmt(row.mes) : "—"}</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, display: "block", minWidth: 0, color: row.rest > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{row.rest > 0 ? fmt(row.rest) : "—"}</span>
             </div>
+          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px 90px", padding: "5px 8px", background: SHEET.gris, borderTop: "1px solid " + SHEET.grisBorde }}>
+            <span style={{ fontSize: 11, fontWeight: 700 }}>Total</span>
+            <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: "#aaa" }}>{fmt(totalFijos + promedioTDCMensual + aportacionFamilia + aportacionPrestamos + aportacionAhorro + aportacionInversion)}</span>
+            <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700 }}>{fmt(flujoMinimo + deudaTDCMes + aportacionFamilia + aportacionPrestamos + aportacionAhorro + aportacionInversion)}</span>
+            <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(restanteFijosMes + deudaTDCMes + restanteFamiliaMes + restantePrestaMes + restanteAhorroMes + restanteInversionMes)}</span>
           </div>
         </div>
+      </div>
 
-        {/* Margen de Liquidez + Movimientos */}
-        <div style={{ minWidth: 0, overflow: "hidden" }}>
-          <p style={tituloStyle}>Margen de Liquidez</p>
-          <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 62px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3 }}>
-              {["", "Pendiente", "Actual", "Diferencia"].map((h, i) => (
-                <span key={i} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
-              ))}
-            </div>
-            {[
-              { label: "Presupuesto", pendiente: pendientePresupuesto, actual: saldoActualTotal, dif: margenPresupuesto },
-              { label: "Alerta Flujo", pendiente: pendienteAlerta, actual: saldoActualTotal, dif: margenAlerta },
-            ].map((row) => (
-              <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px 62px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3 }}>
-                <span style={{ fontSize: 11 }}>{row.label}</span>
-                <span style={{ fontSize: 10, textAlign: "right", color: row.pendiente > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(row.pendiente)}</span>
-                <span style={{ fontSize: 10, textAlign: "right" }}>{fmt(row.actual)}</span>
-                <span style={{ fontSize: 10, textAlign: "right", fontWeight: 700, color: row.dif >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(row.dif)}</span>
-              </div>
+      {/* Margen de Liquidez */}
+      <div style={seccionStyle}>
+        <p style={tituloStyle}>Margen de Liquidez</p>
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px 120px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+            {["", "Pendiente", "Actual", "Diferencia"].map((h, i) => (
+              <span key={i} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
             ))}
           </div>
+          {[
+            { label: "Presupuesto", pendiente: pendientePresupuesto, actual: saldoActualTotal, dif: margenPresupuesto },
+            { label: "Alerta Flujo", pendiente: pendienteAlerta, actual: saldoActualTotal, dif: margenAlerta },
+          ].map((row) => (
+            <div key={row.label} style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px 120px", padding: "6px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <span style={{ fontSize: 11 }}>{row.label}</span>
+              <span style={{ fontSize: 11, textAlign: "right", color: row.pendiente > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(row.pendiente)}</span>
+              <span style={{ fontSize: 11, textAlign: "right" }}>{fmt(row.actual)}</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: row.dif >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(row.dif)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
 
-          <p style={{ ...tituloStyle, marginTop: 14 }}>Movimientos (origen/destino)</p>
-          <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ background: SHEET.verde, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: SHEET.verdeBorde }}>Ingresos</span>
-              <span style={{ fontSize: 10, color: "#aaa" }}>Prom. / Actual</span>
-            </div>
-            {Object.keys({ ...promedioIngMetodo, ...movsPorMetodoIng }).sort().map((met) => (
-              <div key={met} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3 }}>
-                <span style={{ fontSize: 11 }}>{met}</span>
-                <span style={{ fontSize: 10, textAlign: "right", color: "#aaa" }}>{promedioIngMetodo[met] ? fmt(promedioIngMetodo[met]) : "—"}</span>
-                <span style={{ fontSize: 10, textAlign: "right", fontWeight: 700, color: SHEET.verdeBorde }}>{movsPorMetodoIng[met] ? fmt(movsPorMetodoIng[met]) : "—"}</span>
-              </div>
-            ))}
-            <div style={{ background: SHEET.rosa, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, borderTop: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, color: SHEET.rosaBorde }}>Egresos</span>
-              <span style={{ fontSize: 10, color: "#aaa" }}>Prom. / Actual</span>
-            </div>
-            {Object.keys({ ...promedioEgMetodo, ...movsPorMetodoEg }).sort().map((met) => (
-              <div key={met} style={{ display: "grid", gridTemplateColumns: "1fr 60px 60px", padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3 }}>
-                <span style={{ fontSize: 11 }}>{met}</span>
-                <span style={{ fontSize: 10, textAlign: "right", color: "#aaa" }}>{promedioEgMetodo[met] ? fmt(promedioEgMetodo[met]) : "—"}</span>
-                <span style={{ fontSize: 10, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{movsPorMetodoEg[met] ? fmt(movsPorMetodoEg[met]) : "—"}</span>
-              </div>
-            ))}
+      {/* Movimientos por origen/destino */}
+      <div style={seccionStyle}>
+        <p style={tituloStyle}>Movimientos (origen/destino)</p>
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ background: SHEET.verde, padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: SHEET.verdeBorde }}>Ingresos</span>
+            <span style={{ fontSize: 10, color: "#aaa" }}>Promedio / Actual</span>
           </div>
+          {Object.keys({ ...promedioIngMetodo, ...movsPorMetodoIng }).sort().map((met) => (
+            <div key={met} style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <span style={{ fontSize: 11 }}>{met}</span>
+              <span style={{ fontSize: 11, textAlign: "right", color: "#aaa", display: "block", minWidth: 0 }}>{promedioIngMetodo[met] ? fmt(promedioIngMetodo[met]) : "—"}</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.verdeBorde }}>{movsPorMetodoIng[met] ? fmt(movsPorMetodoIng[met]) : "—"}</span>
+            </div>
+          ))}
+          <div style={{ background: SHEET.rosa, padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, borderTop: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: SHEET.rosaBorde }}>Egresos</span>
+            <span style={{ fontSize: 10, color: "#aaa" }}>Promedio / Actual</span>
+          </div>
+          {Object.keys({ ...promedioEgMetodo, ...movsPorMetodoEg }).sort().map((met) => (
+            <div key={met} style={{ display: "grid", gridTemplateColumns: "1fr 120px 120px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <span style={{ fontSize: 11 }}>{met}</span>
+              <span style={{ fontSize: 11, textAlign: "right", color: "#aaa", display: "block", minWidth: 0 }}>{promedioEgMetodo[met] ? fmt(promedioEgMetodo[met]) : "—"}</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{movsPorMetodoEg[met] ? fmt(movsPorMetodoEg[met]) : "—"}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -1870,7 +1870,7 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
                   <span style={{ fontSize: 11, textAlign: "right", color: "#555" }}>{finCiclo ? finCiclo.slice(5) : "—"}</span>
                   <span style={{ fontSize: 11, textAlign: "right" }}>{fmt(gasto)}</span>
                   <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{fmt(pagado)}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : "✓"}</span>
+                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : <span style={{ color: SHEET.verdeBorde }}>$0.00</span>}</span>
                   <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: disponible <= 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(disponible)}</span>
                 </div>
               );
@@ -1905,12 +1905,10 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
           <p style={tituloStyle}>Egresos por Tipo</p>
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
             {["G. Fijo","G. Variable","Préstamo","Inversión","Ahorro","Pago TDC","Otro(a)"].map((t) => (egresosPorTipo[t] || promedioEgresosPorTipo[t]) ? (
-              <div key={t} style={{ display: "flex", justifyContent: "space-between", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, fontSize: 11 }}>
-                <span style={{ color: "#555" }}>{t}</span>
-                <div style={{ display: "flex", gap: 12 }}>
-                  <span style={{ color: "#aaa" }}>{promedioEgresosPorTipo[t] ? fmt(promedioEgresosPorTipo[t]) : "—"}</span>
-                  <b style={{ color: SHEET.rosaBorde }}>{egresosPorTipo[t] ? fmt(egresosPorTipo[t]) : "—"}</b>
-                </div>
+              <div key={t} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+                <span style={{ color: "#555", fontSize: 11 }}>{t}</span>
+                <span style={{ fontSize: 11, textAlign: "right", color: "#aaa", display: "block", minWidth: 0 }}>{promedioEgresosPorTipo[t] ? fmt(promedioEgresosPorTipo[t]) : "—"}</span>
+                <b style={{ fontSize: 11, textAlign: "right", color: SHEET.rosaBorde, display: "block", minWidth: 0 }}>{egresosPorTipo[t] ? fmt(egresosPorTipo[t]) : "—"}</b>
               </div>
             ) : null)}
             <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 8px", background: SHEET.gris, fontSize: 11, fontWeight: 700 }}>
@@ -2004,7 +2002,7 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
                     <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{p.frecuencia || "Mensual"} · {fmt(p.pagoPeriodo||0)}/periodo</p>
                   </div>
                   <span style={{ fontSize: 11, textAlign: "right", color: faltaMes > 0 ? SHEET.rosaBorde : SHEET.verdeBorde, fontWeight: 700 }}>
-                    {faltaMes > 0 ? fmt(faltaMes) + " falta" : "✓ al día"}
+                    {faltaMes > 0 ? fmt(faltaMes) : "$0.00"}
                   </span>
                   <span style={{ fontSize: 11, textAlign: "right", color: pagadoMes > 0 ? SHEET.verdeBorde : "#ccc", fontWeight: pagadoMes > 0 ? 700 : 400 }}>
                     {pagadoMes > 0 ? fmt(pagadoMes) : "—"}
