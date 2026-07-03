@@ -1289,13 +1289,34 @@ function PagosFuturosTab({ catalog, movimientos }) {
       }
     });
     (catalog.prestamosBancarios || []).filter((p) => p.activa).forEach((p) => {
-      let fecha = proximaFechaDespuesDeHoy(p.ultimoPago, null, p.frecuencia || "Mensual");
-      let intentos = 0;
-      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && intentos < 50) {
-        const mes = fecha.slice(0, 7);
-        if (map[mes]) map[mes].push({ fecha, nombre: p.nombre, tipo: "Préstamo", monto: p.pagoPeriodo || 0, metodo: p.metodo });
-        fecha = calcProximoPago(fecha, p.frecuencia || "Mensual");
-        intentos++;
+      const freq = p.frecuencia || "Mensual";
+      const diasStr = p.diasPago || "";
+      const diasEspecificos = diasStr ? diasStr.split(",").map((d) => parseInt(d.trim())).filter((d) => !isNaN(d)) : [];
+
+      if ((freq === "Quincenal" || freq === "Semanal") && diasEspecificos.length > 0) {
+        // Proyectar usando días exactos de cada mes
+        meses.forEach((mes) => {
+          if (!map[mes]) return;
+          const [y, m] = mes.split("-").map(Number);
+          const diasEnMes = new Date(y, m, 0).getDate(); // último día del mes
+          diasEspecificos.forEach((dia) => {
+            const diaReal = dia === 31 ? diasEnMes : Math.min(dia, diasEnMes);
+            const fecha = `${mes}-${String(diaReal).padStart(2, "0")}`;
+            if (fecha >= hoy) {
+              map[mes].push({ fecha, nombre: p.nombre, tipo: "Préstamo", monto: p.pagoPeriodo || 0, metodo: p.metodo });
+            }
+          });
+        });
+      } else {
+        // Frecuencia mensual o sin días específicos — proyección normal
+        let fecha = proximaFechaDespuesDeHoy(p.ultimoPago, null, freq);
+        let intentos = 0;
+        while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && intentos < 50) {
+          const mes = fecha.slice(0, 7);
+          if (map[mes]) map[mes].push({ fecha, nombre: p.nombre, tipo: "Préstamo", monto: p.pagoPeriodo || 0, metodo: p.metodo });
+          fecha = calcProximoPago(fecha, freq);
+          intentos++;
+        }
       }
     });
     (catalog.ahorros || []).filter((a) => a.activa).forEach((a) => {
@@ -3225,6 +3246,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
   const [prbPagoPeriodo, setPrbPagoPeriodo] = useState("");
   const [prbNumPagos, setPrbNumPagos] = useState("");
   const [prbFrecuencia, setPrbFrecuencia] = useState("Mensual");
+  const [prbDiasPago, setPrbDiasPago] = useState(""); // ej "15,31" para quincenales
   const [prbPagosPrevios, setPrbPagosPrevios] = useState("");
   const [editandoPrbId, setEditandoPrbId] = useState(null);
   const [prtNombre, setPrtNombre] = useState("");
@@ -3490,7 +3512,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
   function limpiarFormPrestamoBancario() {
     setPrbNombre(""); setPrbCategoria("Bancario"); setPrbMetodo(catalog.metodos[0] || "Efectivo"); setPrbCuenta("");
     setPrbMontoFinanciado(""); setPrbPagoPeriodo(""); setPrbNumPagos(""); setPrbFrecuencia("Mensual");
-    setPrbPagosPrevios(""); setEditandoPrbId(null);
+    setPrbDiasPago(""); setPrbPagosPrevios(""); setEditandoPrbId(null);
   }
 
   function guardarPrestamoBancario() {
@@ -3505,7 +3527,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
       id: editandoPrbId || uid(), activa: true, nombre: prbNombre, categoria: prbCategoria,
       metodo: prbMetodo, cuenta: prbCuenta,
       montoFinanciado: parseFloat(prbMontoFinanciado) || 0,
-      pagoPeriodo, numPagos, frecuencia: prbFrecuencia, totalAPagar, pagosPrevios,
+      pagoPeriodo, numPagos, frecuencia: prbFrecuencia, diasPago: prbDiasPago, totalAPagar, pagosPrevios,
       acumulado: existente ? existente.acumulado : acumuladoInicial,
       ultimoPago: existente ? existente.ultimoPago : ""
     };
@@ -3528,7 +3550,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
     setEditandoPrbId(p.id); setPrbNombre(p.nombre); setPrbCategoria(p.categoria); setPrbMetodo(p.metodo);
     setPrbCuenta(p.cuenta); setPrbMontoFinanciado(String(p.montoFinanciado || ""));
     setPrbPagoPeriodo(String(p.pagoPeriodo || "")); setPrbNumPagos(String(p.numPagos || ""));
-    setPrbFrecuencia(p.frecuencia || "Mensual"); setPrbPagosPrevios(String(p.pagosPrevios || 0));
+    setPrbFrecuencia(p.frecuencia || "Mensual"); setPrbDiasPago(p.diasPago || ""); setPrbPagosPrevios(String(p.pagosPrevios || 0));
   }
 
   function toggleActivaPrestamoBancario(id) {
@@ -3913,7 +3935,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                     <Field label="Frecuencia de pago">
                       <div style={{ display: "flex", gap: 6 }}>
                         {["Mensual", "Quincenal", "Semanal"].map((f) => (
-                          <button key={f} onClick={() => setPrbFrecuencia(f)} style={{
+                          <button key={f} onClick={() => { setPrbFrecuencia(f); setPrbDiasPago(""); }} style={{
                             flex: 1, padding: "7px 0", fontSize: 11, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
                             border: prbFrecuencia === f ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
                             background: prbFrecuencia === f ? SHEET.azul : "#fff"
@@ -3921,6 +3943,15 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                         ))}
                       </div>
                     </Field>
+                    {(prbFrecuencia === "Quincenal" || prbFrecuencia === "Semanal") && (
+                      <Field label={prbFrecuencia === "Quincenal" ? "Días de pago del mes (ej. 15, 31)" : "Días de pago del mes (ej. 7, 14, 21, 28)"}>
+                        <input type="text" value={prbDiasPago} onChange={(e) => setPrbDiasPago(e.target.value)}
+                          style={inputBase} placeholder={prbFrecuencia === "Quincenal" ? "Ej. 15, 31" : "Ej. 7, 14, 21, 28"} />
+                        <p style={{ fontSize: 10.5, color: "#777", fontStyle: "italic", margin: "4px 0 0" }}>
+                          Separa los días con coma. Usa 31 para "último día del mes".
+                        </p>
+                      </Field>
+                    )}
                     <Field label="Monto financiado (lo que te prestaron, sin intereses)">
                       <input type="number" inputMode="decimal" value={prbMontoFinanciado} onChange={(e) => setPrbMontoFinanciado(e.target.value)} style={inputBase} placeholder="$0.00 — solo referencia" />
                     </Field>
