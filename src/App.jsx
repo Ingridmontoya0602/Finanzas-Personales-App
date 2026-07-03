@@ -1046,6 +1046,15 @@ function frecuenciaAMeses(frecuencia) {
   return map[frecuencia] || 1;
 }
 
+// Convierte aportación por periodo a equivalente mensual
+// Ej: $1,609 quincenal → $3,218/mes | $700 trimestral → $233/mes
+function aportacionMensual(monto, frecuencia) {
+  const mesesPorPeriodo = frecuenciaAMeses(frecuencia || "Mensual");
+  // mesesPorPeriodo < 1 = pago más frecuente que mensual (semanal=0.25, quincenal=0.5)
+  // mesesPorPeriodo > 1 = pago menos frecuente (trimestral=3, anual=12)
+  return Math.round((monto / mesesPorPeriodo) * 100) / 100;
+}
+
 // Dado el último pago y la frecuencia, calcula la próxima fecha de pago (YYYY-MM-DD)
 function calcProximoPago(ultPagoISO, frecuencia) {
   if (!ultPagoISO) return null;
@@ -1105,24 +1114,24 @@ function calcFijosDelMes(catalog, movimientos = [], mesYM = "") {
     }
   });
 
-  // Préstamos bancarios activos
+  // Préstamos bancarios activos — convertido a equivalente mensual
   (catalog.prestamosBancarios || []).filter((p) => p.activa).forEach((p) => {
-    fijosCat["Préstamos Bancario/Crédito"] = (fijosCat["Préstamos Bancario/Crédito"] || 0) + (p.pagoPeriodo || 0);
+    fijosCat["Préstamos Bancario/Crédito"] = (fijosCat["Préstamos Bancario/Crédito"] || 0) + aportacionMensual(p.pagoPeriodo || 0, p.frecuencia);
   });
 
-  // Ahorro activo
+  // Ahorro activo — convertido a equivalente mensual
   (catalog.ahorros || []).filter((a) => a.activa).forEach((a) => {
-    fijosCat["Ahorro"] = (fijosCat["Ahorro"] || 0) + (a.aportacion || 0);
+    fijosCat["Ahorro"] = (fijosCat["Ahorro"] || 0) + aportacionMensual(a.aportacion || 0, a.frecuencia);
   });
 
-  // Inversión activa
+  // Inversión activa — convertido a equivalente mensual
   (catalog.inversiones || []).filter((i) => i.activa).forEach((i) => {
-    fijosCat["Inversión"] = (fijosCat["Inversión"] || 0) + (i.aportacion || 0);
+    fijosCat["Inversión"] = (fijosCat["Inversión"] || 0) + aportacionMensual(i.aportacion || 0, i.frecuencia);
   });
 
-  // Familia aportación activa
+  // Familia aportación activa — convertido a equivalente mensual
   (catalog.familiares || []).filter((f) => f.activa).forEach((f) => {
-    fijosCat["Familia (Aportación)"] = (fijosCat["Familia (Aportación)"] || 0) + (f.aportacion || 0);
+    fijosCat["Familia (Aportación)"] = (fijosCat["Familia (Aportación)"] || 0) + aportacionMensual(f.aportacion || 0, f.frecuencia);
   });
 
   // Diferidos activos
@@ -1337,6 +1346,11 @@ function PagosFuturosTab({ catalog, movimientos }) {
   };
 
   const mesActual = hoy.slice(0, 7);
+  const [mesesAbiertos, setMesesAbiertos] = useState({ [mesActual]: true });
+
+  function toggleMes(mes) {
+    setMesesAbiertos((prev) => ({ ...prev, [mes]: !prev[mes] }));
+  }
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
@@ -1348,37 +1362,77 @@ function PagosFuturosTab({ catalog, movimientos }) {
         const items = (porMes[mes] || []).sort((a, b) => a.fecha.localeCompare(b.fecha));
         const totalMes = items.reduce((s, i) => s + i.monto, 0);
         const esMesActual = mes === mesActual;
+        const abierto = !!mesesAbiertos[mes];
+
+        // Resumen por tipo para mostrar en el header cuando está cerrado
+        const resumenTipos = {};
+        items.forEach((item) => { resumenTipos[item.tipo] = (resumenTipos[item.tipo] || 0) + item.monto; });
+
         return (
-          <div key={mes} style={{ marginBottom: 16, border: `1px solid ${esMesActual ? SHEET.azulBorde : SHEET.grisBorde}`, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ background: esMesActual ? SHEET.azul : SHEET.gris, padding: "7px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid " + SHEET.grisBorde }}>
-              <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>
-                {esMesActual ? "📍 " : ""}{mesLabel(mes)}
-              </span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: SHEET.rosaBorde }}>{totalMes > 0 ? fmt(totalMes) : "—"}</span>
-            </div>
-            {items.length === 0 ? (
-              <p style={{ fontSize: 11, color: "#aaa", fontStyle: "italic", padding: "8px 12px", margin: 0 }}>Sin pagos programados este mes.</p>
-            ) : (
-              <div>
-                {items.map((item, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderBottom: i < items.length - 1 ? "1px solid " + SHEET.grisBorde : "none", background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 10, background: colores[item.tipo] || SHEET.gris, color: coloresBorde[item.tipo] || "#333", whiteSpace: "nowrap", border: `1px solid ${coloresBorde[item.tipo] || SHEET.grisBorde}` }}>
-                      {item.tipo}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 12, fontWeight: 700 }}>{item.nombre}</span>
-                      {item.metodo && <span style={{ fontSize: 10, color: "#aaa", marginLeft: 6 }}>{item.metodo}</span>}
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: SHEET.rosaBorde }}>{fmt(item.monto)}</p>
-                      <p style={{ fontSize: 10, color: "#aaa", margin: 0 }}>{fmtDate(item.fecha)}</p>
-                    </div>
-                  </div>
-                ))}
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 10px", background: SHEET.gris, fontSize: 11, fontWeight: 700 }}>
-                  <span>{items.length} pago{items.length !== 1 ? "s" : ""}</span>
-                  <span style={{ color: SHEET.rosaBorde }}>{fmt(totalMes)}</span>
+          <div key={mes} style={{ marginBottom: 10, border: `1px solid ${esMesActual ? SHEET.azulBorde : SHEET.grisBorde}`, borderRadius: 4, overflow: "hidden" }}>
+            {/* Header — siempre visible, clickeable */}
+            <button onClick={() => toggleMes(mes)} style={{
+              width: "100%", background: esMesActual ? SHEET.azul : SHEET.gris,
+              padding: "10px 12px", border: "none", cursor: "pointer",
+              borderBottom: abierto ? "1px solid " + SHEET.grisBorde : "none",
+              fontFamily: SHEET.fuente, textAlign: "left"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>
+                  {esMesActual ? "📍 " : ""}{mesLabel(mes)}
+                </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: totalMes > 0 ? SHEET.rosaBorde : "#aaa" }}>
+                    {totalMes > 0 ? fmt(totalMes) : "—"}
+                  </span>
+                  <span style={{ fontSize: 11, color: "#888" }}>{abierto ? "▲" : "▼"}</span>
                 </div>
+              </div>
+              {/* Mini resumen por tipo cuando está cerrado */}
+              {!abierto && items.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+                  {Object.entries(resumenTipos).map(([tipo, monto]) => (
+                    <span key={tipo} style={{
+                      fontSize: 10, padding: "1px 6px", borderRadius: 10,
+                      background: colores[tipo] || SHEET.gris,
+                      color: coloresBorde[tipo] || "#333",
+                      border: `1px solid ${coloresBorde[tipo] || SHEET.grisBorde}`
+                    }}>
+                      {tipo}: {fmt(monto)}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </button>
+
+            {/* Detalle desplegable */}
+            {abierto && (
+              <div>
+                {items.length === 0 ? (
+                  <p style={{ fontSize: 11, color: "#aaa", fontStyle: "italic", padding: "8px 12px", margin: 0 }}>Sin pagos programados este mes.</p>
+                ) : (
+                  <>
+                    {items.map((item, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderBottom: "1px solid " + SHEET.grisBorde, background: i % 2 === 0 ? "#fff" : "#fafafa" }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 10, background: colores[item.tipo] || SHEET.gris, color: coloresBorde[item.tipo] || "#333", whiteSpace: "nowrap", border: `1px solid ${coloresBorde[item.tipo] || SHEET.grisBorde}` }}>
+                          {item.tipo}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700 }}>{item.nombre}</span>
+                          {item.metodo && <span style={{ fontSize: 10, color: "#aaa", marginLeft: 6 }}>{item.metodo}</span>}
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: SHEET.rosaBorde }}>{fmt(item.monto)}</p>
+                          <p style={{ fontSize: 10, color: "#aaa", margin: 0 }}>{fmtDate(item.fecha)}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", background: SHEET.gris, borderTop: "1px solid " + SHEET.grisBorde }}>
+                      <span style={{ fontSize: 11, fontWeight: 700 }}>{items.length} pago{items.length !== 1 ? "s" : ""}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(totalMes)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1525,7 +1579,8 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
     });
     (catalog.prestamosBancarios || []).filter((p) => p.activa).forEach((p) => {
       const gastado = movsMes.filter((m) => m.mov === "Egreso" && m.tipo === "Préstamo" && m.subcategoria === p.nombre).reduce((s, m) => s + Number(m.cantidad), 0);
-      items.push({ nombre: p.nombre, costo: p.pagoPeriodo || 0, frecuencia: p.frecuencia || "Mensual", gastado, pagado: gastado > 0, ultPago: null, metodo: p.metodo, categoria: "Préstamo" });
+      const costoMensual = aportacionMensual(p.pagoPeriodo || 0, p.frecuencia);
+      items.push({ nombre: p.nombre, costo: costoMensual, frecuencia: p.frecuencia || "Mensual", gastado, pagado: gastado >= costoMensual * 0.9, ultPago: null, metodo: p.metodo, categoria: "Préstamo" });
     });
     return items;
   }, [movsMes, catalog, mesFiltro, movimientos]);
@@ -1556,10 +1611,10 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
     const pagado = pagadoCicloTDC(t.nombre, finCiclo, fechaPago);
     return s + Math.max(0, gasto - pagado);
   }, 0);
-  const aportacionPrestamos = (catalog.prestamosBancarios || []).filter(p => p.activa).reduce((s, p) => s + (p.pagoPeriodo || 0), 0);
-  const aportacionAhorro = (catalog.ahorros || []).filter(a => a.activa).reduce((s, a) => s + (a.aportacion || 0), 0);
-  const aportacionInversion = (catalog.inversiones || []).filter(i => i.activa).reduce((s, i) => s + (i.aportacion || 0), 0);
-  const aportacionFamilia = (catalog.familiares || []).filter(f => f.activa).reduce((s, f) => s + (f.aportacion || 0), 0);
+  const aportacionPrestamos = (catalog.prestamosBancarios || []).filter(p => p.activa).reduce((s, p) => s + aportacionMensual(p.pagoPeriodo || 0, p.frecuencia), 0);
+  const aportacionAhorro = (catalog.ahorros || []).filter(a => a.activa).reduce((s, a) => s + aportacionMensual(a.aportacion || 0, a.frecuencia), 0);
+  const aportacionInversion = (catalog.inversiones || []).filter(i => i.activa).reduce((s, i) => s + aportacionMensual(i.aportacion || 0, i.frecuencia), 0);
+  const aportacionFamilia = (catalog.familiares || []).filter(f => f.activa).reduce((s, f) => s + aportacionMensual(f.aportacion || 0, f.frecuencia), 0);
 
   // Restante este mes = aportación del mes - lo ya pagado este mes (no el total de la vida)
   const pagadoPrestaMes = movsMes.filter(m => m.mov === "Egreso" && m.tipo === "Préstamo").reduce((s, m) => s + Number(m.cantidad), 0);
@@ -2106,12 +2161,13 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
             </div>
             {prestamosBancarios.filter(p=>p.activa).map((p) => {
               const pagadoMes = movsMes.filter((m) => m.mov === "Egreso" && m.tipo === "Préstamo" && m.subcategoria === p.nombre).reduce((s,m)=>s+Number(m.cantidad),0);
-              const faltaMes = Math.max(0, (p.pagoPeriodo || 0) - pagadoMes);
+              const aportMes = aportacionMensual(p.pagoPeriodo || 0, p.frecuencia);
+              const faltaMes = Math.max(0, aportMes - pagadoMes);
               return (
                 <div key={p.id} style={{ display: "grid", gridTemplateColumns: "1fr 90px 90px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, alignItems: "center" }}>
                   <div>
                     <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>{p.nombre}</p>
-                    <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{p.frecuencia || "Mensual"} · {fmt(p.pagoPeriodo||0)}/periodo</p>
+                    <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{p.frecuencia || "Mensual"} · {fmt(p.pagoPeriodo||0)}/periodo · {fmt(aportMes)}/mes</p>
                   </div>
                   <span style={{ fontSize: 11, textAlign: "right", color: faltaMes > 0 ? SHEET.rosaBorde : SHEET.verdeBorde, fontWeight: 700 }}>
                     {faltaMes > 0 ? fmt(faltaMes) : "$0.00"}
