@@ -234,14 +234,15 @@ function LoginScreen() {
   );
 }
 
-function TabBar({ tab, setTab, onLogout }) {
+function TabBar({ tab, setTab, onLogout, userEmail }) {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const tabs = [
-    { id: "registrar", label: "Registro", icon: "+" },
-    { id: "resumen", label: "Reporte", icon: "▤" },
-    { id: "historial", label: "Historial", icon: "≡" },
-    { id: "presupuesto", label: "Presupuesto", icon: "₱" },
-    { id: "estado", label: "Estado", icon: "📋" }
+    { id: "registrar", label: "Registro" },
+    { id: "resumen", label: "Reporte" },
+    { id: "historial", label: "Historial" },
+    { id: "presupuesto", label: "Presup." },
+    { id: "estado", label: "Estado" },
+    { id: "cuenta", label: "👤" },
   ];
   const menuItems = [
     { id: "ahorro", label: "Ahorro" },
@@ -273,19 +274,16 @@ function TabBar({ tab, setTab, onLogout }) {
         }}>☰</button>
         {tabs.map((t) => (
           <button key={t.id} onClick={() => irA(t.id)} style={{
-            flex: 1, padding: "8px 4px", background: tab === t.id ? SHEET.amarillo : "transparent",
+            flex: t.id === "cuenta" ? "0 0 auto" : 1,
+            padding: t.id === "cuenta" ? "8px 10px" : "8px 2px",
+            background: tab === t.id ? SHEET.amarillo : "transparent",
             border: tab === t.id ? `1px solid ${SHEET.amarilloBorde}` : "1px solid transparent", borderRadius: 3,
-            color: SHEET.texto, fontSize: 12, fontWeight: 700, fontStyle: "italic", fontFamily: SHEET.fuente, cursor: "pointer"
+            color: SHEET.texto, fontSize: t.id === "cuenta" ? 15 : 11, fontWeight: 700, fontStyle: "italic",
+            fontFamily: SHEET.fuente, cursor: "pointer"
           }}>
             {t.label}
           </button>
         ))}
-        <button onClick={onLogout} title="Cerrar sesión" style={{
-          padding: "8px 10px", background: "transparent", border: "1px solid transparent", borderRadius: 3,
-          color: SHEET.rosaBorde, fontSize: 12, fontWeight: 700, fontStyle: "italic", fontFamily: SHEET.fuente, cursor: "pointer"
-        }}>
-          Salir
-        </button>
       </div>
       {menuAbierto && (
         <div style={{
@@ -305,6 +303,61 @@ function TabBar({ tab, setTab, onLogout }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function CuentaTab({ userEmail, movimientos, onLogout }) {
+  const totalMovimientos = movimientos.length;
+  const primerMov = movimientos.length > 0 ? movimientos.reduce((min, m) => m.fecha < min ? m.fecha : min, movimientos[0].fecha) : null;
+  return (
+    <div style={{ fontFamily: SHEET.fuente }}>
+      {/* Avatar y datos */}
+      <div style={{ textAlign: "center", padding: "24px 16px 20px", borderBottom: "1px solid " + SHEET.grisBorde, marginBottom: 20 }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: SHEET.amarillo, border: `2px solid ${SHEET.amarilloBorde}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: 28 }}>
+          👤
+        </div>
+        <p style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px" }}>{userEmail}</p>
+        <p style={{ fontSize: 11, color: "#888", margin: 0 }}>Finanzas Personales</p>
+      </div>
+
+      {/* Estadísticas rápidas */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "12px", textAlign: "center", background: SHEET.gris }}>
+          <p style={{ fontSize: 22, fontWeight: 700, margin: "0 0 2px", color: SHEET.azulBorde }}>{totalMovimientos}</p>
+          <p style={{ fontSize: 11, color: "#777", margin: 0 }}>Movimientos</p>
+        </div>
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, padding: "12px", textAlign: "center", background: SHEET.gris }}>
+          <p style={{ fontSize: 14, fontWeight: 700, margin: "0 0 2px", color: "#555" }}>{primerMov ? fmtDate(primerMov) : "—"}</p>
+          <p style={{ fontSize: 11, color: "#777", margin: 0 }}>Desde</p>
+        </div>
+      </div>
+
+      {/* Info app */}
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginBottom: 24 }}>
+        {[
+          { label: "App", valor: "Finanzas Personales" },
+          { label: "Versión", valor: "2026" },
+          { label: "Datos", valor: "Guardados en la nube (Supabase)" },
+        ].map((row, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 12px", borderBottom: i < 2 ? "1px solid " + SHEET.grisBorde : "none", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "#777" }}>{row.label}</span>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>{row.valor}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Botón cerrar sesión centrado */}
+      <div style={{ textAlign: "center" }}>
+        <button onClick={onLogout} style={{
+          padding: "12px 32px", fontSize: 14, fontWeight: 700, fontStyle: "italic",
+          border: `1px solid ${SHEET.rosaBorde}`, borderRadius: 4, background: SHEET.rosa,
+          color: SHEET.rosaBorde, cursor: "pointer", fontFamily: SHEET.fuente
+        }}>
+          Cerrar sesión
+        </button>
+        <p style={{ fontSize: 11, color: "#aaa", marginTop: 8 }}>Se cerrará la sesión en este dispositivo</p>
+      </div>
     </div>
   );
 }
@@ -718,107 +771,165 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
 }
 
 function ResumenTab({ movimientos, catalog }) {
-  const [mesFiltro, setMesFiltro] = useState(todayISO().slice(0, 7));
+  const [mesAbierto, setMesAbierto] = useState(null);
+
+  // --- Flujo total acumulado hasta hoy ---
+  const totalIngresosHist = movimientos.filter((m) => m.mov === "Ingreso").reduce((s, m) => s + Number(m.cantidad), 0);
+  const totalEgresosHist = movimientos.filter((m) => m.mov === "Egreso").reduce((s, m) => s + Number(m.cantidad), 0);
+  const balanceTotal = totalIngresosHist - totalEgresosHist;
+
+  // Desglose ingresos por tipo (histórico)
+  const ingresosPorTipo = useMemo(() => {
+    const map = {};
+    movimientos.filter((m) => m.mov === "Ingreso").forEach((m) => {
+      const t = m.ingresoTipo || m.tipo || "Otro(a)";
+      map[t] = (map[t] || 0) + Number(m.cantidad);
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [movimientos]);
+
+  // Desglose egresos por tipo (histórico)
+  const egresosPorTipo = useMemo(() => {
+    const map = {};
+    movimientos.filter((m) => m.mov === "Egreso").forEach((m) => {
+      const t = m.tipo || "Otro(a)";
+      map[t] = (map[t] || 0) + Number(m.cantidad);
+    });
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
+  }, [movimientos]);
+
+  // --- Balance por mes para el historial desplegable ---
   const meses = useMemo(() => {
     const set = new Set(movimientos.map((m) => m.fecha.slice(0, 7)));
-    set.add(todayISO().slice(0, 7));
     return Array.from(set).sort().reverse();
   }, [movimientos]);
-  const movsMes = useMemo(() => movimientos.filter((m) => m.fecha.slice(0, 7) === mesFiltro), [movimientos, mesFiltro]);
-  const totalIngresos = movsMes.filter((m) => m.mov === "Ingreso").reduce((a, m) => a + m.cantidad, 0);
-  const totalEgresos = movsMes.filter((m) => m.mov === "Egreso").reduce((a, m) => a + m.cantidad, 0);
-  const balance = totalIngresos - totalEgresos;
-  const porCategoria = useMemo(() => {
-    const map = {};
-    movsMes.filter((m) => m.mov === "Egreso" && m.tipo === "G. Variable").forEach((m) => { map[m.categoria] = (map[m.categoria] || 0) + m.cantidad; });
-    return map;
-  }, [movsMes]);
-  const presupuestoMes = (catalog.presupuestosMensuales || {})[mesFiltro] || {};
-  const presupuestoCats = presupuestoMes.categorias || {};
-  const catVariables = ["Comidas", "Compras Online", "Educación", "Entretenimiento", "Gastos Personales",
-    "Intereses TDC", "Mascotas", "Otro(a)", "Regalos y Festejos", "Ropa y Accesorios",
-    "Salud y Bienestar", "Supermercado", "Tecnología", "Tienda de Conveniencia",
-    "Transporte", "Viajes y Vacaciones", "Vivienda"];
-  const presupuestoRows = catVariables.map((cat) => {
-    const presupuesto = presupuestoCats[cat] || 0;
-    const usado = porCategoria[cat] || 0;
-    const disponible = presupuesto - usado;
-    const pct = presupuesto > 0 ? Math.min(100, (usado / presupuesto) * 100) : (usado > 0 ? 100 : 0);
-    return { cat, presupuesto, usado, disponible, pct };
-  }).filter((r) => r.presupuesto > 0 || r.usado > 0).sort((a, b) => b.usado - a.usado);
-  const porCuenta = useMemo(() => {
-    const map = {};
-    movsMes.filter((m) => m.mov === "Egreso").forEach((m) => { map[m.cuenta] = (map[m.cuenta] || 0) + m.cantidad; });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]);
-  }, [movsMes]);
+
+  const balancePorMes = useMemo(() => {
+    return meses.map((mes) => {
+      const movsMes = movimientos.filter((m) => m.fecha.startsWith(mes));
+      const ing = movsMes.filter((m) => m.mov === "Ingreso").reduce((s, m) => s + Number(m.cantidad), 0);
+      const eg = movsMes.filter((m) => m.mov === "Egreso").reduce((s, m) => s + Number(m.cantidad), 0);
+      const bal = ing - eg;
+      // Desglose por tipo para el desplegable
+      const ingTipos = {};
+      movsMes.filter((m) => m.mov === "Ingreso").forEach((m) => { const t = m.ingresoTipo || m.tipo || "Otro(a)"; ingTipos[t] = (ingTipos[t] || 0) + Number(m.cantidad); });
+      const egTipos = {};
+      movsMes.filter((m) => m.mov === "Egreso").forEach((m) => { const t = m.tipo || "Otro(a)"; egTipos[t] = (egTipos[t] || 0) + Number(m.cantidad); });
+      return { mes, ing, eg, bal, ingTipos, egTipos };
+    });
+  }, [meses, movimientos]);
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
-      <Field label="Mes">
-        <select value={mesFiltro} onChange={(e) => setMesFiltro(e.target.value)} style={{ ...inputBase, background: SHEET.azul }}>
-          {meses.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
-        </select>
-      </Field>
 
-      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginBottom: 14 }}>
-        <HeaderBand color={SHEET.azul} borderColor={SHEET.azulBorde}>Flujo de Efectivo</HeaderBand>
+      {/* === FLUJO TOTAL ACUMULADO === */}
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginBottom: 18 }}>
+        <HeaderBand color={SHEET.azul} borderColor={SHEET.azulBorde}>Flujo de Efectivo Total</HeaderBand>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "#fff" }}>
-          <div style={{ padding: "12px 14px", borderRight: "1px solid " + SHEET.grisBorde }}>
-            <p style={{ fontSize: 11, fontStyle: "italic", fontWeight: 700, margin: 0, color: SHEET.verdeBorde }}>Ingresos</p>
-            <p style={{ fontSize: 19, fontWeight: 700, margin: "4px 0 0" }}>{fmtShort(totalIngresos)}</p>
+          <div style={{ padding: "14px", borderRight: "1px solid " + SHEET.grisBorde }}>
+            <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 4px", color: SHEET.verdeBorde }}>Total Ingresos</p>
+            <p style={{ fontSize: 22, fontWeight: 700, margin: 0, color: SHEET.verdeBorde }}>{fmtShort(totalIngresosHist)}</p>
           </div>
-          <div style={{ padding: "12px 14px" }}>
-            <p style={{ fontSize: 11, fontStyle: "italic", fontWeight: 700, margin: 0, color: SHEET.rosaBorde }}>Egresos</p>
-            <p style={{ fontSize: 19, fontWeight: 700, margin: "4px 0 0" }}>{fmtShort(totalEgresos)}</p>
+          <div style={{ padding: "14px" }}>
+            <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 4px", color: SHEET.rosaBorde }}>Total Egresos</p>
+            <p style={{ fontSize: 22, fontWeight: 700, margin: 0, color: SHEET.rosaBorde }}>{fmtShort(totalEgresosHist)}</p>
           </div>
         </div>
-        <div style={{ padding: "10px 14px", background: SHEET.gris, borderTop: "1px solid " + SHEET.grisBorde, textAlign: "center" }}>
-          <span style={{ fontSize: 12, fontStyle: "italic", fontWeight: 700, marginRight: 8 }}>Balance:</span>
-          <span style={{ fontSize: 18, fontWeight: 700, color: balance >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(balance)}</span>
+        <div style={{ padding: "12px 14px", background: balanceTotal >= 0 ? SHEET.verde : SHEET.rosa, borderTop: "1px solid " + SHEET.grisBorde, textAlign: "center" }}>
+          <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 2px", color: balanceTotal >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>Saldo disponible acumulado</p>
+          <p style={{ fontSize: 26, fontWeight: 700, margin: 0, color: balanceTotal >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(balanceTotal)}</p>
         </div>
       </div>
 
-      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginBottom: 14 }}>
-        <HeaderBand color={SHEET.rosa} borderColor={SHEET.rosaBorde}>Presupuesto vs. Gastado</HeaderBand>
-        <div style={{ background: "#fff", padding: "12px 14px" }}>
-          {presupuestoRows.length === 0 && <p style={{ fontSize: 13, color: "#666", fontStyle: "italic" }}>Sin movimientos de gasto variable este mes.</p>}
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {presupuestoRows.map((r) => {
-              const over = r.disponible < 0;
-              const near = !over && r.pct >= 80;
-              const barColor = over ? SHEET.rosaBorde : near ? SHEET.amarilloBorde : SHEET.verdeBorde;
-              return (
-                <div key={r.cat}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4, fontWeight: 700 }}>
-                    <span>{r.cat}</span>
-                    <span style={{ color: "#555", fontWeight: 400 }}>{fmtShort(r.usado)} / {fmtShort(r.presupuesto)}</span>
+      {/* Desglose ingresos histórico */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ background: SHEET.verde, padding: "6px 10px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: SHEET.verdeBorde }}>Ingresos por tipo</span>
+          </div>
+          {ingresosPorTipo.map(([t, v]) => (
+            <div key={t} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", borderBottom: "1px solid " + SHEET.grisBorde, fontSize: 11 }}>
+              <span style={{ color: "#555" }}>{t}</span>
+              <b style={{ color: SHEET.verdeBorde }}>{fmt(v)}</b>
+            </div>
+          ))}
+        </div>
+        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ background: SHEET.rosa, padding: "6px 10px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: SHEET.rosaBorde }}>Egresos por tipo</span>
+          </div>
+          {egresosPorTipo.map(([t, v]) => (
+            <div key={t} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", borderBottom: "1px solid " + SHEET.grisBorde, fontSize: 11 }}>
+              <span style={{ color: "#555" }}>{t}</span>
+              <b style={{ color: SHEET.rosaBorde }}>{fmt(v)}</b>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* === HISTORIAL POR MES (desplegable) === */}
+      <p style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic", borderBottom: `2px solid ${SHEET.rosaBorde}`, paddingBottom: 4, marginBottom: 10 }}>
+        Historial por mes
+      </p>
+      {balancePorMes.map(({ mes, ing, eg, bal, ingTipos, egTipos }) => {
+        const abierto = mesAbierto === mes;
+        const esMesActual = mes === todayISO().slice(0, 7);
+        return (
+          <div key={mes} style={{ border: `1px solid ${abierto ? SHEET.azulBorde : SHEET.grisBorde}`, borderRadius: 4, marginBottom: 8, overflow: "hidden" }}>
+            <button onClick={() => setMesAbierto(abierto ? null : mes)} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              width: "100%", padding: "10px 12px", background: abierto ? SHEET.azul : SHEET.gris,
+              border: "none", cursor: "pointer", fontFamily: SHEET.fuente
+            }}>
+              <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>
+                {esMesActual ? "📍 " : ""}{mesLabel(mes)}
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: bal >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>
+                  {bal >= 0 ? "+" : ""}{fmt(bal)}
+                </span>
+                <span style={{ fontSize: 11, color: "#888" }}>{abierto ? "▲" : "▼"}</span>
+              </div>
+            </button>
+            {abierto && (
+              <div style={{ background: "#fff", padding: "10px 12px", borderTop: "1px solid " + SHEET.grisBorde }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <div style={{ background: SHEET.verde, borderRadius: 4, padding: "8px 10px" }}>
+                    <p style={{ fontSize: 10, color: SHEET.verdeBorde, margin: "0 0 2px", fontWeight: 700 }}>Ingresos</p>
+                    <p style={{ fontSize: 16, fontWeight: 700, margin: 0, color: SHEET.verdeBorde }}>{fmt(ing)}</p>
                   </div>
-                  <div style={{ height: 9, background: SHEET.gris, border: "1px solid " + SHEET.grisBorde, borderRadius: 2, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${r.pct}%`, background: barColor }} />
+                  <div style={{ background: SHEET.rosa, borderRadius: 4, padding: "8px 10px" }}>
+                    <p style={{ fontSize: 10, color: SHEET.rosaBorde, margin: "0 0 2px", fontWeight: 700 }}>Egresos</p>
+                    <p style={{ fontSize: 16, fontWeight: 700, margin: 0, color: SHEET.rosaBorde }}>{fmt(eg)}</p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {porCuenta.length > 0 && (
-        <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-          <HeaderBand color={SHEET.amarillo} borderColor={SHEET.amarilloBorde}>Gasto por Cuenta</HeaderBand>
-          <div style={{ background: "#fff" }}>
-            {porCuenta.map(([cuenta, monto], i) => (
-              <div key={cuenta} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "10px 14px", background: i % 2 === 0 ? "#fff" : SHEET.gris, borderTop: i === 0 ? "none" : "1px solid " + SHEET.grisBorde }}>
-                <span style={{ fontWeight: 700 }}>{cuenta}</span>
-                <span>{fmt(monto)}</span>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div>
+                    {Object.entries(ingTipos).sort((a,b)=>b[1]-a[1]).map(([t,v]) => (
+                      <div key={t} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "3px 0", borderBottom: "1px solid " + SHEET.grisBorde }}>
+                        <span style={{ color: "#555" }}>{t}</span>
+                        <b style={{ color: SHEET.verdeBorde }}>{fmt(v)}</b>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    {Object.entries(egTipos).sort((a,b)=>b[1]-a[1]).map(([t,v]) => (
+                      <div key={t} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, padding: "3px 0", borderBottom: "1px solid " + SHEET.grisBorde }}>
+                        <span style={{ color: "#555" }}>{t}</span>
+                        <b style={{ color: SHEET.rosaBorde }}>{fmt(v)}</b>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            ))}
+            )}
           </div>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
+
 
 function HistorialTab({ movimientos, deleteMovimiento }) {
   const [filtroMes, setFiltroMes] = useState("todos");
@@ -6175,7 +6286,7 @@ export default function App() {
         <h2 style={{ margin: 0, fontWeight: 700, fontStyle: "italic", fontSize: 19 }}>Finanzas Personales</h2>
         <p style={{ fontSize: 12, color: "#666", margin: "2px 0 0", fontStyle: "italic" }}>{session.user.email} · {movimientos.length} movimientos</p>
       </div>
-      <TabBar tab={tab} setTab={setTab} onLogout={handleLogout} />
+      <TabBar tab={tab} setTab={setTab} onLogout={handleLogout} userEmail={session.user.email} />
       {sinDatosPropios && tab !== "catalogos" && (
         <div style={{
           position: "relative", background: SHEET.amarillo, border: `1px solid ${SHEET.amarilloBorde}`, borderRadius: 4,
@@ -6196,6 +6307,7 @@ export default function App() {
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "presupuesto" && <PresupuestoTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
+      {tab === "cuenta" && <CuentaTab userEmail={session.user.email} movimientos={movimientos} onLogout={handleLogout} />}
       {tab === "estado" && <EstadoMesTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "pagos-futuros" && <PagosFuturosTab catalog={catalog} movimientos={movimientos} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} movimientos={movimientos} />}
