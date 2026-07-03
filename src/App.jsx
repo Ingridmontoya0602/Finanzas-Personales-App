@@ -1962,9 +1962,9 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
         <p style={tituloStyle}>Tarjetas de Crédito</p>
         {tarjetas.length === 0 ? <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin tarjetas configuradas.</p> : (
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1.8fr 55px 55px 75px 75px 75px 80px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
-              {["Tarjeta", "Inicio", "Corte", "Gasto", "Pagado", "Restante", "Disponible"].map((h, i) => (
-                <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h}</span>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 85px 90px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+              {["Tarjeta", "Gasto", "Pagado", "Restante", "Disponible"].map((h, i) => (
+                <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
               ))}
             </div>
             {tarjetas.map((t) => {
@@ -1975,13 +1975,14 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
               const difPend = Math.round(difPendienteTDC(t.nombre) * 100) / 100;
               const disponible = Math.max(0, (t.limite || 0) - difPend - restante);
               return (
-                <div key={t.nombre} style={{ display: "grid", gridTemplateColumns: "1.8fr 55px 55px 75px 75px 75px 80px", padding: "6px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4, alignItems: "center" }}>
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>{t.nombre}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", color: "#555" }}>{inicioCiclo ? inicioCiclo.slice(5) : "—"}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", color: "#555" }}>{finCiclo ? finCiclo.slice(5) : "—"}</span>
+                <div key={t.nombre} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 85px 90px", padding: "8px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4, alignItems: "center" }}>
+                  <div>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>{t.nombre}</span>
+                    <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{inicioCiclo ? inicioCiclo.slice(5) : "—"} → {finCiclo ? finCiclo.slice(5) : "—"}</p>
+                  </div>
                   <span style={{ fontSize: 11, textAlign: "right" }}>{fmt(gasto)}</span>
                   <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{fmt(pagado)}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : <span style={{ color: SHEET.verdeBorde }}>$0.00</span>}</span>
+                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : "$0.00"}</span>
                   <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: disponible <= 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(disponible)}</span>
                 </div>
               );
