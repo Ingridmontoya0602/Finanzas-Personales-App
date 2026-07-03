@@ -1241,7 +1241,8 @@ function PagosFuturosTab({ catalog, movimientos }) {
   const porMes = useMemo(() => {
     const map = {};
     meses.forEach((m) => { map[m] = []; });
-    // Para cada item recurrente, genera todas las ocurrencias en los meses futuros
+
+    // Membresías — sin límite (recurrentes indefinidas)
     (catalog.membresias || []).filter((m) => m.activa).forEach((m) => {
       const ult = ultimoPagoDeHistorial(movimientos, "Membresías", m.nombre);
       let fecha = proximaFechaDespuesDeHoy(ult, m.ultimoPago, m.frecuencia || "Mensual");
@@ -1253,6 +1254,8 @@ function PagosFuturosTab({ catalog, movimientos }) {
         intentos++;
       }
     });
+
+    // Servicios — sin límite
     (catalog.servicios || []).filter((s) => s.activa && !s.esVariable).forEach((s) => {
       const ult = ultimoPagoDeHistorial(movimientos, "Servicios", s.nombre);
       let fecha = proximaFechaDespuesDeHoy(ult, s.ultimoPago, s.frecuencia || "Mensual");
@@ -1264,6 +1267,8 @@ function PagosFuturosTab({ catalog, movimientos }) {
         intentos++;
       }
     });
+
+    // Seguros — sin límite
     (catalog.seguros || []).filter((s) => s.activa).forEach((s) => {
       const ult = ultimoPagoDeHistorial(movimientos, "Seguros", s.nombre);
       let fecha = proximaFechaDespuesDeHoy(ult, s.ultimoPago, s.frecuencia || "Anual");
@@ -1275,83 +1280,120 @@ function PagosFuturosTab({ catalog, movimientos }) {
         intentos++;
       }
     });
+
+    // Diferidos — parar cuando se acaben los pagos restantes
     (catalog.diferidos || []).filter((d) => d.activo).forEach((d) => {
       let fecha = proximaFechaDespuesDeHoy(d.ultPago, null, "Mensual");
       let pagosHechos = d.pagos || 0;
       const plazo = d.plazoMeses || 0;
+      const pagosRestantes = Math.max(0, plazo - pagosHechos);
+      let proyectados = 0;
       let intentos = 0;
-      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && pagosHechos < plazo && intentos < 50) {
+      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && proyectados < pagosRestantes && intentos < 50) {
         const mes = fecha.slice(0, 7);
         if (map[mes]) map[mes].push({ fecha, nombre: d.nombre || d.categoria, tipo: "Diferido TDC", monto: d.aportacion || 0, metodo: "TDC" });
         fecha = calcProximoPago(fecha, "Mensual");
-        pagosHechos++;
+        proyectados++;
         intentos++;
       }
     });
+
+    // Préstamos — parar cuando se alcance el total a pagar
     (catalog.prestamosBancarios || []).filter((p) => p.activa).forEach((p) => {
       const freq = p.frecuencia || "Mensual";
       const diasStr = p.diasPago || "";
       const diasEspecificos = diasStr ? diasStr.split(",").map((d) => parseInt(d.trim())).filter((d) => !isNaN(d)) : [];
+      const totalAPagar = p.totalAPagar || 0;
+      const acumulado = p.acumulado || 0;
+      const pagoPeriodo = p.pagoPeriodo || 0;
+      const pagosRestantes = pagoPeriodo > 0 ? Math.max(0, Math.ceil((totalAPagar - acumulado) / pagoPeriodo)) : 0;
+      let proyectados = 0;
 
       if ((freq === "Quincenal" || freq === "Semanal") && diasEspecificos.length > 0) {
-        // Proyectar usando días exactos de cada mes
         meses.forEach((mes) => {
-          if (!map[mes]) return;
+          if (!map[mes] || proyectados >= pagosRestantes) return;
           const [y, m] = mes.split("-").map(Number);
-          const diasEnMes = new Date(y, m, 0).getDate(); // último día del mes
+          const diasEnMes = new Date(y, m, 0).getDate();
           diasEspecificos.forEach((dia) => {
+            if (proyectados >= pagosRestantes) return;
             const diaReal = dia === 31 ? diasEnMes : Math.min(dia, diasEnMes);
             const fecha = `${mes}-${String(diaReal).padStart(2, "0")}`;
             if (fecha >= hoy) {
-              map[mes].push({ fecha, nombre: p.nombre, tipo: "Préstamo", monto: p.pagoPeriodo || 0, metodo: p.metodo });
+              map[mes].push({ fecha, nombre: p.nombre, tipo: "Préstamo", monto: pagoPeriodo, metodo: p.metodo });
+              proyectados++;
             }
           });
         });
       } else {
-        // Frecuencia mensual o sin días específicos — proyección normal
         let fecha = proximaFechaDespuesDeHoy(p.ultimoPago, null, freq);
         let intentos = 0;
-        while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && intentos < 50) {
+        while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && proyectados < pagosRestantes && intentos < 50) {
           const mes = fecha.slice(0, 7);
-          if (map[mes]) map[mes].push({ fecha, nombre: p.nombre, tipo: "Préstamo", monto: p.pagoPeriodo || 0, metodo: p.metodo });
+          if (map[mes]) map[mes].push({ fecha, nombre: p.nombre, tipo: "Préstamo", monto: pagoPeriodo, metodo: p.metodo });
           fecha = calcProximoPago(fecha, freq);
+          proyectados++;
           intentos++;
         }
       }
     });
+
+    // Ahorro — parar cuando se alcance la meta
     (catalog.ahorros || []).filter((a) => a.activa).forEach((a) => {
       const ult = ultimoPagoDeHistorial(movimientos, "Ahorro", a.nombre);
       let fecha = proximaFechaDespuesDeHoy(ult, null, a.frecuencia || "Mensual");
+      const meta = a.meta || 0;
+      const acumulado = a.acumulado || 0;
+      const aportacion = a.aportacion || 0;
+      const pagosRestantes = meta > 0 && aportacion > 0 ? Math.max(0, Math.ceil((meta - acumulado) / aportacion)) : 999;
+      let proyectados = 0;
       let intentos = 0;
-      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && intentos < 50) {
+      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && proyectados < pagosRestantes && intentos < 50) {
         const mes = fecha.slice(0, 7);
-        if (map[mes]) map[mes].push({ fecha, nombre: a.nombre, tipo: "Ahorro", monto: a.aportacion || 0, metodo: a.metodo });
+        if (map[mes]) map[mes].push({ fecha, nombre: a.nombre, tipo: "Ahorro", monto: aportacion, metodo: a.metodo });
         fecha = calcProximoPago(fecha, a.frecuencia || "Mensual");
+        proyectados++;
         intentos++;
       }
     });
+
+    // Inversión — parar cuando se alcance la meta
     (catalog.inversiones || []).filter((i) => i.activa).forEach((i) => {
       const ult = ultimoPagoDeHistorial(movimientos, "Inversión", i.nombre);
       let fecha = proximaFechaDespuesDeHoy(ult, null, i.frecuencia || "Mensual");
+      const meta = i.meta || 0;
+      const acumulado = i.acumulado || 0;
+      const aportacion = i.aportacion || 0;
+      const pagosRestantes = meta > 0 && aportacion > 0 ? Math.max(0, Math.ceil((meta - acumulado) / aportacion)) : 999;
+      let proyectados = 0;
       let intentos = 0;
-      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && intentos < 50) {
+      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && proyectados < pagosRestantes && intentos < 50) {
         const mes = fecha.slice(0, 7);
-        if (map[mes]) map[mes].push({ fecha, nombre: i.nombre, tipo: "Inversión", monto: i.aportacion || 0, metodo: i.metodo });
+        if (map[mes]) map[mes].push({ fecha, nombre: i.nombre, tipo: "Inversión", monto: aportacion, metodo: i.metodo });
         fecha = calcProximoPago(fecha, i.frecuencia || "Mensual");
+        proyectados++;
         intentos++;
       }
     });
+
+    // Familia — parar cuando se alcance la meta
     (catalog.familiares || []).filter((f) => f.activa).forEach((f) => {
       const ult = ultimoPagoDeHistorial(movimientos, "Aportación", f.nombre);
       let fecha = proximaFechaDespuesDeHoy(ult, null, f.frecuencia || "Mensual");
+      const meta = f.meta || 0;
+      const acumulado = f.acumuladoAport || 0;
+      const aportacion = f.aportacion || 0;
+      const pagosRestantes = meta > 0 && aportacion > 0 ? Math.max(0, Math.ceil((meta - acumulado) / aportacion)) : 999;
+      let proyectados = 0;
       let intentos = 0;
-      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && intentos < 50) {
+      while (fecha && fecha.slice(0, 7) <= meses[meses.length - 1] && proyectados < pagosRestantes && intentos < 50) {
         const mes = fecha.slice(0, 7);
-        if (map[mes]) map[mes].push({ fecha, nombre: f.nombre, tipo: "Familia", monto: f.aportacion || 0, metodo: f.metodo });
+        if (map[mes]) map[mes].push({ fecha, nombre: f.nombre, tipo: "Familia", monto: aportacion, metodo: f.metodo });
         fecha = calcProximoPago(fecha, f.frecuencia || "Mensual");
+        proyectados++;
         intentos++;
       }
     });
+
     return map;
   }, [catalog, movimientos]);
 
