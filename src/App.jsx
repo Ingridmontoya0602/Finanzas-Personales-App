@@ -385,6 +385,11 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [mensualidadFija, setMensualidadFija] = useState("");
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState({});
+  const [modalFijos, setModalFijos] = useState(false);
+  const [fijosSeleccionados, setFijosSeleccionados] = useState([]);
+  const [ajusteTDD, setAjusteTDD] = useState("");
+  const [ajusteEfectivo, setAjusteEfectivo] = useState("");
+  const [fijosRegistrados, setFijosRegistrados] = useState(false);
 
   const cuentasDisponibles = catalog.cuentas[metodo] || [];
   const categoriasDisponibles = catalog.categorias[tipo] || [];
@@ -464,12 +469,178 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const bandColor = mov === "Egreso" ? SHEET.rosa : SHEET.verde;
   const bandBorder = mov === "Egreso" ? SHEET.rosaBorde : SHEET.verdeBorde;
 
+  // Construir lista de fijos del mes actual
+  const hoyMes = todayISO().slice(0, 7);
+  function buildFijosList() {
+    const items = [];
+    const hoyStr = todayISO();
+    // Membresías activas
+    (catalog.membresias || []).filter(m => m.activa).forEach(m => {
+      items.push({ id: `mem-${m.id}`, nombre: m.nombre, categoria: "Membresías", tipo: "G. Fijo", metodo: m.metodo || "TDC", cuenta: m.cuenta || "", monto: m.costo || 0, label: "Membresía" });
+    });
+    // Servicios activos
+    (catalog.servicios || []).filter(s => s.activa && !s.esVariable).forEach(s => {
+      items.push({ id: `serv-${s.id}`, nombre: s.nombre, categoria: "Servicios", tipo: "G. Fijo", metodo: s.metodo || "TDC", cuenta: s.cuenta || "", monto: s.costo || 0, label: "Servicio" });
+    });
+    // Seguros activos
+    (catalog.seguros || []).filter(s => s.activa).forEach(s => {
+      items.push({ id: `seg-${s.id}`, nombre: s.nombre, categoria: "Seguros", tipo: "G. Fijo", metodo: s.metodo || "TDD", cuenta: s.cuenta || "", monto: s.costo || 0, label: "Seguro" });
+    });
+    // Diferidos activos
+    (catalog.diferidos || []).filter(d => d.activo).forEach(d => {
+      items.push({ id: `dif-${d.id}`, nombre: d.nombre || d.categoria, categoria: "Diferidos", tipo: "Diferido TDC", metodo: "TDC", cuenta: d.tarjeta || "", monto: d.aportacion || 0, label: "Diferido TDC" });
+    });
+    // Préstamos activos
+    (catalog.prestamosBancarios || []).filter(p => p.activa).forEach(p => {
+      items.push({ id: `prest-${p.id}`, nombre: p.nombre, categoria: "Préstamos", tipo: "Préstamo", metodo: p.metodo || "TDD", cuenta: p.cuenta || "", monto: p.pagoPeriodo || 0, label: "Préstamo" });
+    });
+    // Ahorro activo
+    (catalog.ahorros || []).filter(a => a.activa).forEach(a => {
+      items.push({ id: `ah-${a.id}`, nombre: a.nombre, categoria: "Ahorro", tipo: "Ahorro", metodo: a.metodo || "TDD", cuenta: a.cuenta || "", monto: a.aportacion || 0, label: "Ahorro" });
+    });
+    // Inversión activa
+    (catalog.inversiones || []).filter(i => i.activa).forEach(i => {
+      items.push({ id: `inv-${i.id}`, nombre: i.nombre, categoria: "Inversión", tipo: "Inversión", metodo: i.metodo || "TDD", cuenta: i.cuenta || "", monto: i.aportacion || 0, label: "Inversión" });
+    });
+    return items;
+  }
+
+  function abrirModalFijos() {
+    const lista = buildFijosList();
+    setFijosSeleccionados(lista.map(f => ({ ...f, seleccionado: true })));
+    setAjusteTDD(""); setAjusteEfectivo(""); setFijosRegistrados(false);
+    setModalFijos(true);
+  }
+
+  async function registrarFijosSeleccionados() {
+    const seleccionados = fijosSeleccionados.filter(f => f.seleccionado);
+    for (const f of seleccionados) {
+      await addMovimiento({
+        mov: "Egreso", metodo: f.metodo, cuenta: f.cuenta,
+        tipo: f.tipo, categoria: f.categoria, subcategoria: f.nombre,
+        descripcion: `Registro automático ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: f.monto
+      });
+    }
+    // Ajuste TDD si se especificó
+    const totalFijosEgresados = seleccionados.reduce((s, f) => s + f.monto, 0);
+    if (ajusteTDD && parseFloat(ajusteTDD) > 0) {
+      const saldoActual = parseFloat(ajusteTDD);
+      const necesario = saldoActual + totalFijosEgresados;
+      await addMovimiento({
+        mov: "Ingreso", metodo: "TDD", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
+        subcategoria: "", descripcion: `Ajuste de saldo TDD - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: necesario
+      });
+    }
+    if (ajusteEfectivo && parseFloat(ajusteEfectivo) > 0) {
+      await addMovimiento({
+        mov: "Ingreso", metodo: "Efectivo", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
+        subcategoria: "", descripcion: `Ajuste de saldo Efectivo - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: parseFloat(ajusteEfectivo)
+      });
+    }
+    setFijosRegistrados(true);
+  }
+
+  const totalFijosModal = fijosSeleccionados.filter(f => f.seleccionado).reduce((s, f) => s + f.monto, 0);
+  const coloresTipo = { "Membresía": SHEET.azul, "Servicio": "#E8F4F8", "Seguro": "#FFF3E0", "Diferido TDC": SHEET.rosa, "Préstamo": "#FCE4EC", "Ahorro": SHEET.verde, "Inversión": "#E8F5E9" };
+  const coloresTipoBorde = { "Membresía": SHEET.azulBorde, "Servicio": "#0288D1", "Seguro": "#EF6C00", "Diferido TDC": SHEET.rosaBorde, "Préstamo": "#C62828", "Ahorro": SHEET.verdeBorde, "Inversión": "#2E7D32" };
+
   function selStyle(hasError) {
     return { ...inputBase, background: "#fff", border: hasError ? `2px solid ${SHEET.rojo}` : "1px solid " + SHEET.grisBorde };
   }
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
+
+      {/* Botón Ponerme al corriente */}
+      <button onClick={abrirModalFijos} style={{
+        width: "100%", padding: "11px", marginBottom: 14, fontSize: 13, fontWeight: 700, fontStyle: "italic",
+        border: `1px solid ${SHEET.amarilloBorde}`, borderRadius: 4, background: SHEET.amarillo,
+        color: SHEET.texto, cursor: "pointer", fontFamily: SHEET.fuente, display: "flex", alignItems: "center", justifyContent: "center", gap: 8
+      }}>⚡ Registrar fijos del mes</button>
+
+      {/* Modal Fijos del Mes */}
+      {modalFijos && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "16px 12px", overflowY: "auto" }}>
+          <div style={{ background: "#fff", borderRadius: 6, width: "100%", maxWidth: 500, fontFamily: SHEET.fuente, maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+            {/* Header */}
+            <div style={{ padding: "14px 16px", borderBottom: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+              <div>
+                <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>⚡ Registrar fijos del mes</p>
+                <p style={{ fontSize: 11, color: "#888", margin: "2px 0 0" }}>Desmarca los que ya registraste</p>
+              </div>
+              <button onClick={() => setModalFijos(false)} style={{ fontSize: 18, background: "none", border: "none", cursor: "pointer", color: "#666" }}>✕</button>
+            </div>
+
+            {/* Lista scrolleable */}
+            <div style={{ overflowY: "auto", flex: 1, padding: "10px 14px" }}>
+              {fijosSeleccionados.length === 0 ? (
+                <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>No tienes gastos fijos activos configurados.</p>
+              ) : (
+                fijosSeleccionados.map((f, i) => (
+                  <div key={f.id} onClick={() => setFijosSeleccionados(prev => prev.map((x, j) => j === i ? { ...x, seleccionado: !x.seleccionado } : x))}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderBottom: "1px solid " + SHEET.grisBorde, cursor: "pointer", background: f.seleccionado ? "#fff" : SHEET.gris, borderRadius: 3 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 3, border: `2px solid ${f.seleccionado ? SHEET.verdeBorde : SHEET.grisBorde}`, background: f.seleccionado ? SHEET.verde : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13 }}>
+                      {f.seleccionado ? "✓" : ""}
+                    </div>
+                    <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 10, background: coloresTipo[f.label] || SHEET.gris, color: coloresTipoBorde[f.label] || "#333", border: `1px solid ${coloresTipoBorde[f.label] || SHEET.grisBorde}`, whiteSpace: "nowrap" }}>{f.label}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: f.seleccionado ? "#222" : "#aaa" }}>{f.nombre}</p>
+                      <p style={{ fontSize: 10, color: "#aaa", margin: 0 }}>{f.metodo}{f.cuenta ? ` · ${f.cuenta}` : ""}</p>
+                    </div>
+                    <b style={{ fontSize: 12, color: f.seleccionado ? SHEET.rosaBorde : "#ccc", flexShrink: 0 }}>{fmt(f.monto)}</b>
+                  </div>
+                ))
+              )}
+
+              {/* Total seleccionados */}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 8px", marginTop: 4, background: SHEET.gris, borderRadius: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>{fijosSeleccionados.filter(f => f.seleccionado).length} seleccionados</span>
+                <b style={{ fontSize: 13, color: SHEET.rosaBorde }}>{fmt(totalFijosModal)}</b>
+              </div>
+
+              {/* Ajuste de saldo */}
+              <div style={{ marginTop: 14, padding: "12px", background: SHEET.azul, borderRadius: 4, border: "1px solid " + SHEET.azulBorde }}>
+                <p style={{ fontSize: 12, fontWeight: 700, margin: "0 0 8px" }}>Ajuste de saldo (opcional)</p>
+                <p style={{ fontSize: 11, color: "#555", margin: "0 0 10px" }}>
+                  Si sabes cuánto tienes ahorita en tu TDD o efectivo, dímelo y registro el ingreso de ajuste para que cuadre.
+                </p>
+                <Field label="¿Cuánto tienes en TDD ahorita? (saldo real)">
+                  <input type="number" inputMode="decimal" value={ajusteTDD} onChange={e => setAjusteTDD(e.target.value)} style={inputBase} placeholder="$0.00" />
+                </Field>
+                {ajusteTDD && parseFloat(ajusteTDD) >= 0 && (
+                  <div style={{ background: "#fff", borderRadius: 4, padding: "8px 10px", marginTop: 4, fontSize: 11 }}>
+                    <p style={{ margin: "0 0 2px" }}>Fijos a registrar: <b style={{ color: SHEET.rosaBorde }}>−{fmt(totalFijosModal)}</b></p>
+                    <p style={{ margin: "0 0 2px" }}>Saldo deseado: <b style={{ color: SHEET.verdeBorde }}>{fmt(parseFloat(ajusteTDD))}</b></p>
+                    <p style={{ margin: 0, fontWeight: 700 }}>Ingreso de ajuste a registrar: <b style={{ color: SHEET.azulBorde }}>{fmt(parseFloat(ajusteTDD) + totalFijosModal)}</b></p>
+                  </div>
+                )}
+                <div style={{ marginTop: 8 }}>
+                  <Field label="¿Cuánto tienes en Efectivo? (opcional)">
+                    <input type="number" inputMode="decimal" value={ajusteEfectivo} onChange={e => setAjusteEfectivo(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  </Field>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: "12px 14px", borderTop: "1px solid " + SHEET.grisBorde, flexShrink: 0 }}>
+              {fijosRegistrados ? (
+                <div style={{ background: SHEET.verde, border: "1px solid " + SHEET.verdeBorde, borderRadius: 4, padding: "12px", textAlign: "center" }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: SHEET.verdeBorde, margin: "0 0 4px" }}>✓ ¡Registrado!</p>
+                  <p style={{ fontSize: 11, color: "#555", margin: "0 0 10px" }}>Los fijos aparecen en tu historial. Usa la 🗑 para eliminar los que no correspondan.</p>
+                  <button onClick={() => setModalFijos(false)} style={{ padding: "8px 20px", fontSize: 12, fontWeight: 700, border: "1px solid " + SHEET.verdeBorde, borderRadius: 4, background: "#fff", cursor: "pointer", fontFamily: SHEET.fuente }}>Cerrar</button>
+                </div>
+              ) : (
+                <button onClick={registrarFijosSeleccionados} disabled={fijosSeleccionados.filter(f => f.seleccionado).length === 0}
+                  style={{ width: "100%", padding: "12px", fontSize: 13, fontWeight: 700, fontStyle: "italic", border: "none", borderRadius: 4, background: fijosSeleccionados.filter(f => f.seleccionado).length === 0 ? SHEET.gris : SHEET.rosaBorde, color: fijosSeleccionados.filter(f => f.seleccionado).length === 0 ? "#aaa" : "#fff", cursor: fijosSeleccionados.filter(f => f.seleccionado).length === 0 ? "not-allowed" : "pointer", fontFamily: SHEET.fuente }}>
+                  ⚡ Registrar {fijosSeleccionados.filter(f => f.seleccionado).length} movimientos ({fmt(totalFijosModal)})
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <button onClick={() => { setMov("Egreso"); setErrors({}); }} style={{
           flex: 1, padding: "10px", borderRadius: 4, fontSize: 14, fontWeight: 700, fontStyle: "italic", cursor: "pointer", fontFamily: SHEET.fuente,
