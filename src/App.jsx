@@ -2080,9 +2080,9 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
         <p style={tituloStyle}>Tarjetas de Crédito</p>
         {tarjetas.length === 0 ? <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin tarjetas configuradas.</p> : (
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 85px 90px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 68px 68px 72px 78px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3 }}>
               {["Tarjeta", "Gasto", "Pagado", "Restante", "Disponible"].map((h, i) => (
-                <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
+                <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h}</span>
               ))}
             </div>
             {tarjetas.map((t) => {
@@ -2093,7 +2093,7 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
               const difPend = Math.round(difPendienteTDC(t.nombre) * 100) / 100;
               const disponible = Math.max(0, (t.limite || 0) - difPend - restante);
               return (
-                <div key={t.nombre} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 85px 90px", padding: "8px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4, alignItems: "center" }}>
+                <div key={t.nombre} style={{ display: "grid", gridTemplateColumns: "1fr 68px 68px 72px 78px", padding: "8px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3, alignItems: "center" }}>
                   <div>
                     <span style={{ fontSize: 12, fontWeight: 700 }}>{t.nombre}</span>
                     <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{inicioCiclo ? inicioCiclo.slice(5) : "—"} → {finCiclo ? finCiclo.slice(5) : "—"}</p>
@@ -2110,18 +2110,16 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
       </div>
 
       {/* Ingresos y Egresos en grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 14 }}>
         {/* Ingresos */}
         <div>
           <p style={tituloStyle}>Ingresos</p>
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
             {["Sueldo","Comisión","Préstamo","Reembolso","Otro(a)"].map((t) => (ingresosPorTipo[t] || promedioIngresosPorTipo[t]) ? (
-              <div key={t} style={{ display: "flex", justifyContent: "space-between", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, fontSize: 11 }}>
-                <span style={{ color: "#555" }}>{t}</span>
-                <div style={{ display: "flex", gap: 12 }}>
-                  <span style={{ color: "#aaa" }}>{promedioIngresosPorTipo[t] ? fmt(promedioIngresosPorTipo[t]) : "—"}</span>
-                  <b style={{ color: SHEET.verdeBorde }}>{ingresosPorTipo[t] ? fmt(ingresosPorTipo[t]) : "—"}</b>
-                </div>
+              <div key={t} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+                <span style={{ color: "#555", fontSize: 11 }}>{t}</span>
+                <span style={{ fontSize: 11, textAlign: "right", color: "#aaa" }}>{promedioIngresosPorTipo[t] ? fmt(promedioIngresosPorTipo[t]) : "—"}</span>
+                <b style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{ingresosPorTipo[t] ? fmt(ingresosPorTipo[t]) : "—"}</b>
               </div>
             ) : null)}
             <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 8px", background: SHEET.gris, fontSize: 11, fontWeight: 700 }}>
@@ -2135,8 +2133,8 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
           <p style={tituloStyle}>Egresos por Tipo</p>
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
             {["G. Fijo","G. Variable","Préstamo","Inversión","Ahorro","Pago TDC","Otro(a)"].map((t) => (egresosPorTipo[t] || promedioEgresosPorTipo[t]) ? (
-              <div key={t} style={{ display: "grid", gridTemplateColumns: "1fr 110px 110px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
-                <span style={{ color: "#555", fontSize: 11 }}>{t}</span>
+              <div key={t} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+                <span style={{ color: "#555", fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t}</span>
                 <span style={{ fontSize: 11, textAlign: "right", color: "#aaa", display: "block", minWidth: 0 }}>{promedioEgresosPorTipo[t] ? fmt(promedioEgresosPorTipo[t]) : "—"}</span>
                 <b style={{ fontSize: 11, textAlign: "right", color: SHEET.rosaBorde, display: "block", minWidth: 0 }}>{egresosPorTipo[t] ? fmt(egresosPorTipo[t]) : "—"}</b>
               </div>
