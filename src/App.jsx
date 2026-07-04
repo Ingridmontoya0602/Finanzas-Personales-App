@@ -389,6 +389,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const [fijosSeleccionados, setFijosSeleccionados] = useState([]);
   const [ajusteTDD, setAjusteTDD] = useState("");
   const [ajusteEfectivo, setAjusteEfectivo] = useState("");
+  const [ajusteTDC, setAjusteTDC] = useState({}); // {nombreTarjeta: saldo}
   const [fijosRegistrados, setFijosRegistrados] = useState(false);
 
   const cuentasDisponibles = catalog.cuentas[metodo] || [];
@@ -473,34 +474,50 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   const hoyMes = todayISO().slice(0, 7);
   function buildFijosList() {
     const items = [];
-    const hoyStr = todayISO();
+    const mesActualStr = todayISO().slice(0, 7);
+    const [y, m] = mesActualStr.split("-").map(Number);
+    const diasEnMes = new Date(y, m, 0).getDate();
+
     // Membresías activas
     (catalog.membresias || []).filter(m => m.activa).forEach(m => {
-      items.push({ id: `mem-${m.id}`, nombre: m.nombre, categoria: "Membresías", tipo: "G. Fijo", metodo: m.metodo || "TDC", cuenta: m.cuenta || "", monto: m.costo || 0, label: "Membresía" });
+      items.push({ id: `mem-${m.id}`, nombre: m.nombre, categoria: "Membresías", tipo: "G. Fijo", metodo: m.metodo || "TDC", cuenta: m.cuenta || "", monto: m.costo || 0, label: "Membresía", detalle: "" });
     });
     // Servicios activos
     (catalog.servicios || []).filter(s => s.activa && !s.esVariable).forEach(s => {
-      items.push({ id: `serv-${s.id}`, nombre: s.nombre, categoria: "Servicios", tipo: "G. Fijo", metodo: s.metodo || "TDC", cuenta: s.cuenta || "", monto: s.costo || 0, label: "Servicio" });
+      items.push({ id: `serv-${s.id}`, nombre: s.nombre, categoria: "Servicios", tipo: "G. Fijo", metodo: s.metodo || "TDC", cuenta: s.cuenta || "", monto: s.costo || 0, label: "Servicio", detalle: "" });
     });
     // Seguros activos
     (catalog.seguros || []).filter(s => s.activa).forEach(s => {
-      items.push({ id: `seg-${s.id}`, nombre: s.nombre, categoria: "Seguros", tipo: "G. Fijo", metodo: s.metodo || "TDD", cuenta: s.cuenta || "", monto: s.costo || 0, label: "Seguro" });
+      items.push({ id: `seg-${s.id}`, nombre: s.nombre, categoria: "Seguros", tipo: "G. Fijo", metodo: s.metodo || "TDD", cuenta: s.cuenta || "", monto: s.costo || 0, label: "Seguro", detalle: "" });
     });
     // Diferidos activos
     (catalog.diferidos || []).filter(d => d.activo).forEach(d => {
-      items.push({ id: `dif-${d.id}`, nombre: d.nombre || d.categoria, categoria: "Diferidos", tipo: "Diferido TDC", metodo: "TDC", cuenta: d.tarjeta || "", monto: d.aportacion || 0, label: "Diferido TDC" });
+      items.push({ id: `dif-${d.id}`, nombre: d.nombre || d.categoria, categoria: "Diferidos", tipo: "Diferido TDC", metodo: "TDC", cuenta: d.tarjeta || "", monto: d.aportacion || 0, label: "Diferido TDC", detalle: "" });
     });
-    // Préstamos activos
+    // Préstamos activos — quincenales/semanales aparecen múltiples veces
     (catalog.prestamosBancarios || []).filter(p => p.activa).forEach(p => {
-      items.push({ id: `prest-${p.id}`, nombre: p.nombre, categoria: "Préstamos", tipo: "Préstamo", metodo: p.metodo || "TDD", cuenta: p.cuenta || "", monto: p.pagoPeriodo || 0, label: "Préstamo" });
+      const freq = p.frecuencia || "Mensual";
+      const diasStr = p.diasPago || "";
+      const diasEsp = diasStr ? diasStr.split(",").map(d => parseInt(d.trim())).filter(d => !isNaN(d)) : [];
+
+      if ((freq === "Quincenal" || freq === "Semanal") && diasEsp.length > 0) {
+        // Agregar una entrada por cada día de pago del mes
+        diasEsp.forEach((dia, i) => {
+          const diaReal = dia === 31 ? diasEnMes : Math.min(dia, diasEnMes);
+          const fechaStr = `${mesActualStr}-${String(diaReal).padStart(2, "0")}`;
+          items.push({ id: `prest-${p.id}-${i}`, nombre: p.nombre, categoria: "Préstamos", tipo: "Préstamo", metodo: p.metodo || "TDD", cuenta: p.cuenta || "", monto: p.pagoPeriodo || 0, label: "Préstamo", detalle: `día ${diaReal}` });
+        });
+      } else {
+        items.push({ id: `prest-${p.id}`, nombre: p.nombre, categoria: "Préstamos", tipo: "Préstamo", metodo: p.metodo || "TDD", cuenta: p.cuenta || "", monto: p.pagoPeriodo || 0, label: "Préstamo", detalle: freq === "Mensual" ? "" : freq });
+      }
     });
     // Ahorro activo
     (catalog.ahorros || []).filter(a => a.activa).forEach(a => {
-      items.push({ id: `ah-${a.id}`, nombre: a.nombre, categoria: "Ahorro", tipo: "Ahorro", metodo: a.metodo || "TDD", cuenta: a.cuenta || "", monto: a.aportacion || 0, label: "Ahorro" });
+      items.push({ id: `ah-${a.id}`, nombre: a.nombre, categoria: "Ahorro", tipo: "Ahorro", metodo: a.metodo || "TDD", cuenta: a.cuenta || "", monto: a.aportacion || 0, label: "Ahorro", detalle: "" });
     });
     // Inversión activa
     (catalog.inversiones || []).filter(i => i.activa).forEach(i => {
-      items.push({ id: `inv-${i.id}`, nombre: i.nombre, categoria: "Inversión", tipo: "Inversión", metodo: i.metodo || "TDD", cuenta: i.cuenta || "", monto: i.aportacion || 0, label: "Inversión" });
+      items.push({ id: `inv-${i.id}`, nombre: i.nombre, categoria: "Inversión", tipo: "Inversión", metodo: i.metodo || "TDD", cuenta: i.cuenta || "", monto: i.aportacion || 0, label: "Inversión", detalle: "" });
     });
     return items;
   }
@@ -508,7 +525,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
   function abrirModalFijos() {
     const lista = buildFijosList();
     setFijosSeleccionados(lista.map(f => ({ ...f, seleccionado: true })));
-    setAjusteTDD(""); setAjusteEfectivo(""); setFijosRegistrados(false);
+    setAjusteTDD(""); setAjusteEfectivo(""); setAjusteTDC({}); setFijosRegistrados(false);
     setModalFijos(true);
   }
 
@@ -518,24 +535,37 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
       await addMovimiento({
         mov: "Egreso", metodo: f.metodo, cuenta: f.cuenta,
         tipo: f.tipo, categoria: f.categoria, subcategoria: f.nombre,
-        descripcion: `Registro automático ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: f.monto
+        descripcion: `Registro automático ${hoyMes}${f.detalle ? ` (${f.detalle})` : ""}`, lugar: "", fecha: todayISO(), cantidad: f.monto
       });
     }
-    // Ajuste TDD si se especificó
     const totalFijosEgresados = seleccionados.reduce((s, f) => s + f.monto, 0);
-    if (ajusteTDD && parseFloat(ajusteTDD) > 0) {
+    // Ajuste TDD
+    if (ajusteTDD && parseFloat(ajusteTDD) >= 0) {
       const saldoActual = parseFloat(ajusteTDD);
       const necesario = saldoActual + totalFijosEgresados;
-      await addMovimiento({
-        mov: "Ingreso", metodo: "TDD", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
-        subcategoria: "", descripcion: `Ajuste de saldo TDD - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: necesario
-      });
+      if (necesario > 0) {
+        await addMovimiento({
+          mov: "Ingreso", metodo: "TDD", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
+          subcategoria: "", descripcion: `Ajuste de saldo TDD - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: necesario
+        });
+      }
     }
+    // Ajuste Efectivo
     if (ajusteEfectivo && parseFloat(ajusteEfectivo) > 0) {
       await addMovimiento({
         mov: "Ingreso", metodo: "Efectivo", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
         subcategoria: "", descripcion: `Ajuste de saldo Efectivo - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: parseFloat(ajusteEfectivo)
       });
+    }
+    // Ajuste TDC por tarjeta
+    for (const [tarjeta, saldoStr] of Object.entries(ajusteTDC)) {
+      const saldo = parseFloat(saldoStr);
+      if (!isNaN(saldo) && saldo >= 0) {
+        await addMovimiento({
+          mov: "Ingreso", metodo: "TDC", cuenta: tarjeta, tipo: "Otro(a)", categoria: "Ajuste",
+          subcategoria: "", descripcion: `Ajuste saldo TDC ${tarjeta} - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: saldo
+        });
+      }
     }
     setFijosRegistrados(true);
   }
@@ -584,7 +614,9 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                     </div>
                     <span style={{ fontSize: 10, padding: "1px 6px", borderRadius: 10, background: coloresTipo[f.label] || SHEET.gris, color: coloresTipoBorde[f.label] || "#333", border: `1px solid ${coloresTipoBorde[f.label] || SHEET.grisBorde}`, whiteSpace: "nowrap" }}>{f.label}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: f.seleccionado ? "#222" : "#aaa" }}>{f.nombre}</p>
+                      <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: f.seleccionado ? "#222" : "#aaa" }}>
+                        {f.nombre}{f.detalle ? <span style={{ fontSize: 10, color: "#888", fontWeight: 400, marginLeft: 4 }}>({f.detalle})</span> : ""}
+                      </p>
                       <p style={{ fontSize: 10, color: "#aaa", margin: 0 }}>{f.metodo}{f.cuenta ? ` · ${f.cuenta}` : ""}</p>
                     </div>
                     <b style={{ fontSize: 12, color: f.seleccionado ? SHEET.rosaBorde : "#ccc", flexShrink: 0 }}>{fmt(f.monto)}</b>
@@ -600,25 +632,37 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
 
               {/* Ajuste de saldo */}
               <div style={{ marginTop: 14, padding: "12px", background: SHEET.azul, borderRadius: 4, border: "1px solid " + SHEET.azulBorde }}>
-                <p style={{ fontSize: 12, fontWeight: 700, margin: "0 0 8px" }}>Ajuste de saldo (opcional)</p>
+                <p style={{ fontSize: 12, fontWeight: 700, margin: "0 0 4px" }}>Ajuste de saldo (opcional)</p>
                 <p style={{ fontSize: 11, color: "#555", margin: "0 0 10px" }}>
-                  Si sabes cuánto tienes ahorita en tu TDD o efectivo, dímelo y registro el ingreso de ajuste para que cuadre.
+                  Dime cuánto tienes ahorita en cada cuenta y registro el ingreso de ajuste para que cuadre.
                 </p>
-                <Field label="¿Cuánto tienes en TDD ahorita? (saldo real)">
+                <Field label="¿Cuánto tienes en TDD ahorita?">
                   <input type="number" inputMode="decimal" value={ajusteTDD} onChange={e => setAjusteTDD(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
-                {ajusteTDD && parseFloat(ajusteTDD) >= 0 && (
-                  <div style={{ background: "#fff", borderRadius: 4, padding: "8px 10px", marginTop: 4, fontSize: 11 }}>
-                    <p style={{ margin: "0 0 2px" }}>Fijos a registrar: <b style={{ color: SHEET.rosaBorde }}>−{fmt(totalFijosModal)}</b></p>
+                {ajusteTDD !== "" && parseFloat(ajusteTDD) >= 0 && (
+                  <div style={{ background: "#fff", borderRadius: 4, padding: "8px 10px", marginTop: 4, marginBottom: 8, fontSize: 11 }}>
+                    <p style={{ margin: "0 0 2px" }}>Fijos a restar: <b style={{ color: SHEET.rosaBorde }}>−{fmt(totalFijosModal)}</b></p>
                     <p style={{ margin: "0 0 2px" }}>Saldo deseado: <b style={{ color: SHEET.verdeBorde }}>{fmt(parseFloat(ajusteTDD))}</b></p>
-                    <p style={{ margin: 0, fontWeight: 700 }}>Ingreso de ajuste a registrar: <b style={{ color: SHEET.azulBorde }}>{fmt(parseFloat(ajusteTDD) + totalFijosModal)}</b></p>
+                    <p style={{ margin: 0, fontWeight: 700 }}>Ingreso de ajuste TDD: <b style={{ color: SHEET.azulBorde }}>{fmt(parseFloat(ajusteTDD) + totalFijosModal)}</b></p>
                   </div>
                 )}
-                <div style={{ marginTop: 8 }}>
-                  <Field label="¿Cuánto tienes en Efectivo? (opcional)">
-                    <input type="number" inputMode="decimal" value={ajusteEfectivo} onChange={e => setAjusteEfectivo(e.target.value)} style={inputBase} placeholder="$0.00" />
-                  </Field>
-                </div>
+                <Field label="¿Cuánto tienes en Efectivo? (opcional)">
+                  <input type="number" inputMode="decimal" value={ajusteEfectivo} onChange={e => setAjusteEfectivo(e.target.value)} style={inputBase} placeholder="$0.00" />
+                </Field>
+                {/* TDC por tarjeta */}
+                {(catalog.tarjetasTDC || []).filter(t => t.activa !== false).length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 6px", color: "#555" }}>¿Cuánto tienes disponible en cada TDC?</p>
+                    {(catalog.tarjetasTDC || []).filter(t => t.activa !== false).map(t => (
+                      <Field key={t.nombre} label={t.nombre}>
+                        <input type="number" inputMode="decimal"
+                          value={ajusteTDC[t.nombre] || ""}
+                          onChange={e => setAjusteTDC(prev => ({ ...prev, [t.nombre]: e.target.value }))}
+                          style={inputBase} placeholder="$0.00" />
+                      </Field>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
