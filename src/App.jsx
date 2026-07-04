@@ -362,7 +362,7 @@ function CuentaTab({ userEmail, movimientos, onLogout }) {
   );
 }
 
-function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
+function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
   const [mov, setMov] = useState("Egreso");
   const [metodo, setMetodo] = useState("");
   const [cuenta, setCuenta] = useState("");
@@ -524,7 +524,34 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
 
   function abrirModalFijos() {
     const lista = buildFijosList();
-    setFijosSeleccionados(lista.map(f => ({ ...f, seleccionado: true })));
+    const mesActualStr = todayISO().slice(0, 7);
+
+    // Buscar movimientos ya registrados este mes
+    const movsMes = (movimientos || []).filter(m => m.fecha && m.fecha.startsWith(mesActualStr) && m.mov === "Egreso");
+
+    // Para cada fijo, detectar si ya fue registrado este mes
+    // Comparamos por subcategoria (nombre del fijo) — igual que como los registramos
+    // Para quincenales con detalle (día X), contamos cuántas veces aparece ese nombre
+    // y marcamos como "ya pagado" según cuántas veces se detecten
+    const conteoNombre = {};
+    movsMes.forEach(m => {
+      const key = m.subcategoria || "";
+      conteoNombre[key] = (conteoNombre[key] || 0) + 1;
+    });
+
+    // Asignar seleccionado=false a los que ya están registrados
+    // Para quincenales (mismo nombre, 2 entradas), la 1ra aparición se marca como pagada,
+    // la 2da solo si hay 2 registros
+    const usados = {};
+    const listaConEstatus = lista.map(f => {
+      const yaUsados = usados[f.nombre] || 0;
+      const totalRegistrados = conteoNombre[f.nombre] || 0;
+      const yaPagado = yaUsados < totalRegistrados;
+      usados[f.nombre] = yaUsados + 1;
+      return { ...f, seleccionado: !yaPagado, yaPagado };
+    });
+
+    setFijosSeleccionados(listaConEstatus);
     setAjusteTDD(""); setAjusteEfectivo(""); setAjusteTDC({}); setFijosRegistrados(false);
     setModalFijos(true);
   }
@@ -608,7 +635,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
               ) : (
                 fijosSeleccionados.map((f, i) => (
                   <div key={f.id} onClick={() => setFijosSeleccionados(prev => prev.map((x, j) => j === i ? { ...x, seleccionado: !x.seleccionado } : x))}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderBottom: "1px solid " + SHEET.grisBorde, cursor: "pointer", background: f.seleccionado ? "#fff" : SHEET.gris, borderRadius: 3 }}>
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 8px", borderBottom: "1px solid " + SHEET.grisBorde, cursor: "pointer", background: f.yaPagado ? "#f0fdf4" : f.seleccionado ? "#fff" : SHEET.gris, borderRadius: 3 }}>
                     <div style={{ width: 20, height: 20, borderRadius: 3, border: `2px solid ${f.seleccionado ? SHEET.verdeBorde : SHEET.grisBorde}`, background: f.seleccionado ? SHEET.verde : "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13 }}>
                       {f.seleccionado ? "✓" : ""}
                     </div>
@@ -617,7 +644,9 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido }) {
                       <p style={{ fontSize: 12, fontWeight: 700, margin: 0, color: f.seleccionado ? "#222" : "#aaa" }}>
                         {f.nombre}{f.detalle ? <span style={{ fontSize: 10, color: "#888", fontWeight: 400, marginLeft: 4 }}>({f.detalle})</span> : ""}
                       </p>
-                      <p style={{ fontSize: 10, color: "#aaa", margin: 0 }}>{f.metodo}{f.cuenta ? ` · ${f.cuenta}` : ""}</p>
+                      <p style={{ fontSize: 10, margin: 0, color: f.yaPagado ? SHEET.verdeBorde : "#aaa" }}>
+                        {f.yaPagado ? "✓ Ya registrado este mes · " : ""}{f.metodo}{f.cuenta ? ` · ${f.cuenta}` : ""}
+                      </p>
                     </div>
                     <b style={{ fontSize: 12, color: f.seleccionado ? SHEET.rosaBorde : "#ccc", flexShrink: 0 }}>{fmt(f.monto)}</b>
                   </div>
@@ -6646,7 +6675,7 @@ export default function App() {
           }}>Ir a Datos →</button>
         </div>
       )}
-      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} />}
+      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} movimientos={movimientos} />}
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "presupuesto" && <PresupuestoTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
