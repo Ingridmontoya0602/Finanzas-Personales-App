@@ -730,13 +730,100 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
         <HeaderBand color={bandColor} borderColor={bandBorder}>{mov}</HeaderBand>
         <div style={{ padding: "12px 14px", background: "#fff" }}>
+
+          {/* EGRESO: primero Tipo → Categoría → Subcategoría, luego Origen/Cuenta */}
+          {mov === "Egreso" && !esDiferido && (
+            <>
+              <Field label="Tipo" error={errors.tipo}>
+                <select value={tipo} onChange={(e) => { setTipo(e.target.value); setErrors((p) => ({ ...p, tipo: false })); }} style={selStyle(errors.tipo)}>
+                  <option value="">Selecciona...</option>
+                  {catalog.tipos.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              <Field label="Categoría" error={errors.categoria}>
+                <select value={categoria} onChange={(e) => {
+                  const v = e.target.value;
+                  setCategoria(v);
+                  setErrors((p) => ({ ...p, categoria: false }));
+                  if (tipo === "Ahorro") {
+                    const aho = (catalog.ahorros || []).find((a) => a.nombre === v);
+                    if (aho) { setCantidad(String(aho.aportacion)); if (aho.metodo) setMetodo(aho.metodo); if (aho.cuenta) setCuenta(aho.cuenta); }
+                  } else if (tipo === "Inversión") {
+                    const inv = (catalog.inversiones || []).find((i) => i.nombre === v);
+                    if (inv) { setCantidad(String(inv.aportacion)); if (inv.metodo) setMetodo(inv.metodo); if (inv.cuenta) setCuenta(inv.cuenta); }
+                  }
+                }} style={selStyle(errors.categoria)} disabled={!tipo}>
+                  <option value="">{tipo ? "Selecciona..." : "Primero elige Tipo"}</option>
+                  {categoriasDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </Field>
+              {/* Subcategoría para G.Fijo (membresías/servicios/seguros) */}
+              {tipo === "G. Fijo" && categoria && (
+                <Field label="Subcategoría" error={errors.subcategoria}>
+                  <select value={subcategoria} onChange={(e) => {
+                    const v = e.target.value;
+                    setSubcategoria(v);
+                    // Autocompletar desde catálogo
+                    let item = null;
+                    if (categoria === "Membresías") item = (catalog.membresias || []).find(m => m.nombre === v);
+                    else if (categoria === "Servicios") item = (catalog.servicios || []).find(s => s.nombre === v);
+                    else if (categoria === "Seguros") item = (catalog.seguros || []).find(s => s.nombre === v);
+                    if (item) {
+                      if (item.metodo) setMetodo(item.metodo);
+                      if (item.cuenta) setCuenta(item.cuenta);
+                      if (item.costo) setCantidad(String(item.costo));
+                    }
+                  }} style={selStyle(errors.subcategoria)} disabled={!categoria}>
+                    <option value="">Selecciona...</option>
+                    {(subcatsDisponibles).map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  {subcategoria && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Origen y cantidad prellenados — puedes cambiarlos.</p>}
+                </Field>
+              )}
+              {/* Subcategoría para otros tipos */}
+              {tipo !== "G. Fijo" && tipo && categoria && subcatsDisponibles.length > 0 && (
+                <Field label="Subcategoría">
+                  <select value={subcategoria} onChange={(e) => setSubcategoria(e.target.value)} style={selStyle(false)}>
+                    <option value="">Selecciona...</option>
+                    {subcatsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </Field>
+              )}
+            </>
+          )}
+
+          {/* INGRESO: Tipo primero */}
+          {mov === "Ingreso" && (
+            <>
+              <Field label="Tipo de ingreso" error={errors.ingresoTipo}>
+                <select value={ingresoTipo} onChange={(e) => { setIngresoTipo(e.target.value); setErrors((p) => ({ ...p, ingresoTipo: false })); }} style={selStyle(errors.ingresoTipo)}>
+                  <option value="">Selecciona...</option>
+                  {catalog.ingresoTipos.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </Field>
+              {ingresoSubsDisponibles.length > 0 && (
+                <Field label="Subcategoría">
+                  <select value={ingresoSub} onChange={(e) => setIngresoSub(e.target.value)} style={selStyle(false)}>
+                    <option value="">Selecciona...</option>
+                    {ingresoSubsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </Field>
+              )}
+              {ingresoSub === "Préstamo de tercero" && (
+                <Field label="¿De quién?">
+                  <input type="text" value={ingresoPersonaTercero} onChange={(e) => setIngresoPersonaTercero(e.target.value)} style={inputBase} placeholder="Nombre" />
+                </Field>
+              )}
+            </>
+          )}
+
+          {/* Origen / Cuenta — siempre después del tipo */}
           <Field label={mov === "Egreso" ? "Origen" : "Destino"} error={errors.metodo}>
             <select value={metodo} onChange={(e) => { setMetodo(e.target.value); setErrors((p) => ({ ...p, metodo: false })); }} style={selStyle(errors.metodo)}>
               <option value="">Selecciona...</option>
               {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
-
           <Field label="Cuenta" error={errors.cuenta}>
             <select value={cuenta} onChange={(e) => { setCuenta(e.target.value); setErrors((p) => ({ ...p, cuenta: false })); }} style={selStyle(errors.cuenta)} disabled={!metodo}>
               <option value="">{metodo ? "Selecciona..." : "Primero elige Origen"}</option>
@@ -744,26 +831,19 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
             </select>
           </Field>
 
+          {/* Diferido TDC toggle */}
           {mov === "Egreso" && metodo === "TDC" && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 10, padding: "8px 10px", background: SHEET.gris, borderRadius: 3 }}>
               <span style={{ fontSize: 13, fontWeight: 700, fontStyle: "italic" }}>¿Deseas agregar un diferido?</span>
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={() => setEsDiferido(true)} style={{
-                  padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                  border: esDiferido ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
-                  background: esDiferido ? SHEET.azul : "#fff"
-                }}>Sí</button>
-                <button onClick={() => setEsDiferido(false)} style={{
-                  padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                  border: !esDiferido ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
-                  background: !esDiferido ? SHEET.azul : "#fff"
-                }}>No</button>
+                <button onClick={() => setEsDiferido(true)} style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente, border: esDiferido ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde, background: esDiferido ? SHEET.azul : "#fff" }}>Sí</button>
+                <button onClick={() => setEsDiferido(false)} style={{ padding: "5px 12px", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente, border: !esDiferido ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde, background: !esDiferido ? SHEET.azul : "#fff" }}>No</button>
               </div>
             </div>
           )}
 
-
-          {esDiferido ? (
+          {/* Diferido fields */}
+          {esDiferido && (
             <>
               <Field label="Nombre del diferido (opcional)">
                 <input type="text" value={nombreDiferido} onChange={(e) => setNombreDiferido(e.target.value)} style={inputBase} placeholder="Ej. iPhone nuevo, Viaje Cancún" />
@@ -783,18 +863,12 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                 </Field>
               )}
               <Field label="Plazo (meses)" error={errors.plazoMeses}>
-                <input type="text" inputMode="numeric" placeholder="Ej. 6" value={plazoMeses}
-                  onChange={(e) => { setPlazoMeses(e.target.value); setErrors((p) => ({ ...p, plazoMeses: false })); }}
-                  style={selStyle(errors.plazoMeses)} />
+                <input type="text" inputMode="numeric" placeholder="Ej. 6" value={plazoMeses} onChange={(e) => { setPlazoMeses(e.target.value); setErrors((p) => ({ ...p, plazoMeses: false })); }} style={selStyle(errors.plazoMeses)} />
               </Field>
               <Field label="¿Lleva intereses?">
                 <div style={{ display: "flex", gap: 6 }}>
                   {[["Sí", true], ["No (sin intereses)", false]].map(([label, val]) => (
-                    <button key={label} onClick={() => { setConIntereses(val); setMensualidadFija(""); }} style={{
-                      flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
-                      border: conIntereses === val ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde,
-                      background: conIntereses === val ? SHEET.azul : "#fff"
-                    }}>{label}</button>
+                    <button key={label} onClick={() => { setConIntereses(val); setMensualidadFija(""); }} style={{ flex: 1, padding: "7px 0", fontSize: 12, fontWeight: 700, fontStyle: "italic", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente, border: conIntereses === val ? `1px solid ${SHEET.azulBorde}` : "1px solid " + SHEET.grisBorde, background: conIntereses === val ? SHEET.azul : "#fff" }}>{label}</button>
                   ))}
                 </div>
               </Field>
@@ -804,9 +878,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                   {mensualidadFija && plazoMeses && parseFloat(mensualidadFija) > 0 && parseInt(plazoMeses) > 0 && (
                     <div style={{ background: SHEET.amarillo, border: "1px solid #e6d200", borderRadius: 4, padding: "7px 10px", marginTop: 6, fontSize: 12 }}>
                       <p style={{ margin: "0 0 2px" }}><b>Total a pagar:</b> {fmt(Math.round(parseFloat(mensualidadFija) * parseInt(plazoMeses) * 100) / 100)}</p>
-                      {cantidad && parseFloat(cantidad) > 0 && (
-                        <p style={{ margin: 0, color: "#666" }}>Intereses totales implícitos: {fmt(Math.round((parseFloat(mensualidadFija) * parseInt(plazoMeses) - parseFloat(cantidad)) * 100) / 100)}</p>
-                      )}
+                      {cantidad && parseFloat(cantidad) > 0 && (<p style={{ margin: 0, color: "#666" }}>Intereses totales implícitos: {fmt(Math.round((parseFloat(mensualidadFija) * parseInt(plazoMeses) - parseFloat(cantidad)) * 100) / 100)}</p>)}
                     </div>
                   )}
                 </Field>
@@ -815,147 +887,24 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                 <>
                   <Field label="¿Ya venías pagando este diferido? (opcional)">
                     <select value={pagosPrevios} onChange={(e) => {
-                      const n = e.target.value;
-                      setPagosPrevios(n);
-                      const mensual = conIntereses && mensualidadFija && parseFloat(mensualidadFija) > 0
-                        ? parseFloat(mensualidadFija)
-                        : (cantidad && parseFloat(cantidad) > 0 && parseInt(plazoMeses) > 0
-                          ? parseFloat(cantidad) / parseInt(plazoMeses) : 0);
+                      const n = e.target.value; setPagosPrevios(n);
+                      const mensual = conIntereses && mensualidadFija && parseFloat(mensualidadFija) > 0 ? parseFloat(mensualidadFija) : (cantidad && parseFloat(cantidad) > 0 && parseInt(plazoMeses) > 0 ? parseFloat(cantidad) / parseInt(plazoMeses) : 0);
                       setPagadoPrevio(n ? String(Math.round(mensual * parseInt(n) * 100) / 100) : "");
                     }} style={inputBase}>
                       <option value="">No, es nuevo — empiezo desde el pago 1</option>
-                      {Array.from({ length: parseInt(plazoMeses) - 1 }, (_, i) => i + 1).map((n) => (
-                        <option key={n} value={n}>Ya pagué {n} mensualidad{n > 1 ? "es" : ""} antes de usar la app</option>
-                      ))}
+                      {Array.from({ length: parseInt(plazoMeses) - 1 }, (_, i) => i + 1).map((n) => (<option key={n} value={n}>Ya pagué {n} mensualidad{n > 1 ? "es" : ""} antes de usar la app</option>))}
                     </select>
                   </Field>
                   {pagosPrevios && (
                     <Field label="Monto total ya pagado">
                       <input type="text" inputMode="decimal" value={pagadoPrevio} onChange={(e) => setPagadoPrevio(e.target.value)} style={inputBase} />
-                      <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                        Te sugerimos este monto, pero puedes ajustarlo si pagaste distinto. Esto no se contará como gasto del mes, solo actualiza el avance del diferido.
-                      </p>
+                      <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Te sugerimos este monto, pero puedes ajustarlo.</p>
                     </Field>
                   )}
                 </>
               )}
             </>
-          ) : mov === "Egreso" ? (
-            <>
-              <Field label="Tipo" error={errors.tipo}>
-                <select value={tipo} onChange={(e) => { setTipo(e.target.value); setErrors((p) => ({ ...p, tipo: false })); }} style={selStyle(errors.tipo)}>
-                  <option value="">Selecciona...</option>
-                  {catalog.tipos.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </Field>
-              <Field label="Categoría" error={errors.categoria}>
-                <select value={categoria} onChange={(e) => {
-                  const v = e.target.value;
-                  setCategoria(v);
-                  setErrors((p) => ({ ...p, categoria: false }));
-                  if (tipo === "Ahorro") {
-                    const aho = (catalog.ahorros || []).find((a) => a.nombre === v);
-                    if (aho) setCantidad(String(aho.aportacion));
-                  } else if (tipo === "Inversión") {
-                    const inv = (catalog.inversiones || []).find((i) => i.nombre === v);
-                    if (inv) setCantidad(String(inv.aportacion));
-                  }
-                }} style={selStyle(errors.categoria)} disabled={!tipo}>
-                  <option value="">{tipo ? "Selecciona..." : "Primero elige Tipo"}</option>
-                  {categoriasDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                {((tipo === "Ahorro" && (catalog.ahorros || []).some((a) => a.nombre === categoria)) ||
-                  (tipo === "Inversión" && (catalog.inversiones || []).some((i) => i.nombre === categoria))) && categoria && (
-                  <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                    Te puse la aportación registrada en Cantidad — puedes ajustarla si metiste distinto.
-                  </p>
-                )}
-                {tipo === "Préstamo" && (categoria === "de Tercero" || categoria === "a Tercero") && (
-                  <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                    {categoria === "a Tercero" ? "Egreso = le prestaste más dinero a esta persona." : "Egreso = le abonaste / pagaste lo que le debías."}
-                  </p>
-                )}
-              </Field>
-              {categoria && subcatsDisponibles.length > 0 && (
-                <Field label="Subcategoría" error={errors.subcategoria}>
-                  <select value={subcategoria} onChange={(e) => {
-                    const v = e.target.value;
-                    setSubcategoria(v);
-                    setErrors((p) => ({ ...p, subcategoria: false }));
-                    if (categoria === "Membresías") {
-                      const mem = (catalog.membresias || []).find((m) => m.nombre === v);
-                      if (mem) setCantidad(String(mem.costo));
-                    } else if (categoria === "Servicios") {
-                      const serv = (catalog.servicios || []).find((s) => s.nombre === v);
-                      if (serv && !serv.esVariable) setCantidad(String(serv.costo));
-                    } else if (categoria === "Seguros") {
-                      const seg = (catalog.seguros || []).find((s) => s.nombre === v);
-                      if (seg) setCantidad(String(seg.costo));
-                    } else if (categoria === "Bancario" || categoria === "Crédito") {
-                      const prb = (catalog.prestamosBancarios || []).find((p) => p.nombre === v);
-                      if (prb) setCantidad(String(prb.pagoPeriodo || ""));
-                    } else if (categoria === "Aportación") {
-                      const fam = (catalog.familiares || []).find((f) => f.nombre === v);
-                      if (fam && fam.aportacion) setCantidad(String(fam.aportacion));
-                    }
-                  }} style={selStyle(errors.subcategoria)}>
-                    <option value="">Selecciona...</option>
-                    {subcatsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  {((categoria === "Membresías" && (catalog.membresias || []).some((m) => m.nombre === subcategoria)) ||
-                    (categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria && !s.esVariable)) ||
-                    (categoria === "Seguros" && (catalog.seguros || []).some((s) => s.nombre === subcategoria)) ||
-                    ((categoria === "Bancario" || categoria === "Crédito") && (catalog.prestamosBancarios || []).some((p) => p.nombre === subcategoria)) ||
-                    (categoria === "Aportación" && (catalog.familiares || []).some((f) => f.nombre === subcategoria && f.aportacion))) && subcategoria && (
-                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                      Te puse el monto registrado en Cantidad — puedes ajustarlo si pagaste distinto.
-                    </p>
-                  )}
-                  {categoria === "Pago TDC Familiar" && subcategoria && (
-                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                      Pago a TDC es de monto libre — captura el total que pagaste este mes.
-                    </p>
-                  )}
-                  {categoria === "Servicios" && (catalog.servicios || []).some((s) => s.nombre === subcategoria && s.esVariable) && (
-                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                      Este servicio es de monto variable — captura el total que pagaste este mes en Cantidad.
-                    </p>
-                  )}
-                </Field>
-              )}
-            </>
-          ) : (
-            <>
-              <Field label="Tipo" error={errors.ingresoTipo}>
-                <select value={ingresoTipo} onChange={(e) => { setIngresoTipo(e.target.value); setErrors((p) => ({ ...p, ingresoTipo: false })); }} style={selStyle(errors.ingresoTipo)}>
-                  <option value="">Selecciona...</option>
-                  {catalog.ingresoTipos.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </Field>
-              {ingresoTipo && ingresoSubsDisponibles.length > 0 && (
-                <Field label="Detalle" error={errors.ingresoSub}>
-                  <select value={ingresoSub} onChange={(e) => { setIngresoSub(e.target.value); setErrors((p) => ({ ...p, ingresoSub: false })); }} style={selStyle(errors.ingresoSub)}>
-                    <option value="">Selecciona...</option>
-                    {ingresoSubsDisponibles.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  {ingresoTipo === "Préstamo" && (ingresoSub === "de Tercero" || ingresoSub === "a Tercero") && (
-                    <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
-                      {ingresoSub === "de Tercero" ? "Ingreso = te prestaron más dinero." : "Ingreso = te abonaron / pagaron lo que te debían."}
-                    </p>
-                  )}
-                </Field>
-              )}
-              {ingresoTipo === "Préstamo" && (ingresoSub === "de Tercero" || ingresoSub === "a Tercero") && (catalog.subcategorias[ingresoSub] || []).length > 0 && (
-                <Field label="Persona" error={errors.ingresoPersonaTercero}>
-                  <select value={ingresoPersonaTercero} onChange={(e) => { setIngresoPersonaTercero(e.target.value); setErrors((p) => ({ ...p, ingresoPersonaTercero: false })); }} style={selStyle(errors.ingresoPersonaTercero)}>
-                    <option value="">Selecciona...</option>
-                    {(catalog.subcategorias[ingresoSub] || []).map((s) => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </Field>
-              )}
-            </>
           )}
-
           <Field label={esDiferido ? "Costo Total" : "Cantidad"} error={errors.cantidad}>
             <input type="text" inputMode="decimal" placeholder="$0.00" value={cantidad}
               onChange={(e) => { setCantidad(e.target.value); setErrors((p) => ({ ...p, cantidad: false })); }}
