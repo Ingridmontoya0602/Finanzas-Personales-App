@@ -666,7 +666,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                   Dime cuánto tienes ahorita en cada cuenta y registro el ingreso de ajuste para que cuadre.
                 </p>
                 <Field label="¿Cuánto tienes en TDD ahorita?">
-                  <input type="number" inputMode="decimal" value={ajusteTDD} onChange={e => setAjusteTDD(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  <input type="text" inputMode="decimal" value={ajusteTDD} onChange={e => setAjusteTDD(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 {ajusteTDD !== "" && parseFloat(ajusteTDD) >= 0 && (
                   <div style={{ background: "#fff", borderRadius: 4, padding: "8px 10px", marginTop: 4, marginBottom: 8, fontSize: 11 }}>
@@ -676,7 +676,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                   </div>
                 )}
                 <Field label="¿Cuánto tienes en Efectivo? (opcional)">
-                  <input type="number" inputMode="decimal" value={ajusteEfectivo} onChange={e => setAjusteEfectivo(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  <input type="text" inputMode="decimal" value={ajusteEfectivo} onChange={e => setAjusteEfectivo(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 {/* TDC por tarjeta */}
                 {(catalog.tarjetasTDC || []).filter(t => t.activa !== false).length > 0 && (
@@ -684,7 +684,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                     <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 6px", color: "#555" }}>¿Cuánto tienes disponible en cada TDC?</p>
                     {(catalog.tarjetasTDC || []).filter(t => t.activa !== false).map(t => (
                       <Field key={t.nombre} label={t.nombre}>
-                        <input type="number" inputMode="decimal"
+                        <input type="text" inputMode="decimal"
                           value={ajusteTDC[t.nombre] || ""}
                           onChange={e => setAjusteTDC(prev => ({ ...prev, [t.nombre]: e.target.value }))}
                           style={inputBase} placeholder="$0.00" />
@@ -783,7 +783,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                 </Field>
               )}
               <Field label="Plazo (meses)" error={errors.plazoMeses}>
-                <input type="number" inputMode="numeric" placeholder="Ej. 6" value={plazoMeses}
+                <input type="text" inputMode="numeric" placeholder="Ej. 6" value={plazoMeses}
                   onChange={(e) => { setPlazoMeses(e.target.value); setErrors((p) => ({ ...p, plazoMeses: false })); }}
                   style={selStyle(errors.plazoMeses)} />
               </Field>
@@ -800,7 +800,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
               </Field>
               {conIntereses && (
                 <Field label="Mensualidad fija (lo que pagas cada mes, ya con intereses incluidos)">
-                  <input type="number" inputMode="decimal" value={mensualidadFija} onChange={(e) => setMensualidadFija(e.target.value)} style={inputBase} placeholder="Ej. $1,215.69" />
+                  <input type="text" inputMode="decimal" value={mensualidadFija} onChange={(e) => setMensualidadFija(e.target.value)} style={inputBase} placeholder="Ej. $1,215.69" />
                   {mensualidadFija && plazoMeses && parseFloat(mensualidadFija) > 0 && parseInt(plazoMeses) > 0 && (
                     <div style={{ background: SHEET.amarillo, border: "1px solid #e6d200", borderRadius: 4, padding: "7px 10px", marginTop: 6, fontSize: 12 }}>
                       <p style={{ margin: "0 0 2px" }}><b>Total a pagar:</b> {fmt(Math.round(parseFloat(mensualidadFija) * parseInt(plazoMeses) * 100) / 100)}</p>
@@ -831,7 +831,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                   </Field>
                   {pagosPrevios && (
                     <Field label="Monto total ya pagado">
-                      <input type="number" inputMode="decimal" value={pagadoPrevio} onChange={(e) => setPagadoPrevio(e.target.value)} style={inputBase} />
+                      <input type="text" inputMode="decimal" value={pagadoPrevio} onChange={(e) => setPagadoPrevio(e.target.value)} style={inputBase} />
                       <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>
                         Te sugerimos este monto, pero puedes ajustarlo si pagaste distinto. Esto no se contará como gasto del mes, solo actualiza el avance del diferido.
                       </p>
@@ -957,7 +957,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
           )}
 
           <Field label={esDiferido ? "Costo Total" : "Cantidad"} error={errors.cantidad}>
-            <input type="number" inputMode="decimal" placeholder="$0.00" value={cantidad}
+            <input type="text" inputMode="decimal" placeholder="$0.00" value={cantidad}
               onChange={(e) => { setCantidad(e.target.value); setErrors((p) => ({ ...p, cantidad: false })); }}
               style={{ ...inputBase, fontSize: 22, fontWeight: 700, textAlign: "center", border: errors.cantidad ? `2px solid ${SHEET.rojo}` : `2px solid ${bandBorder}`, background: errors.cantidad ? "#fff" : bandColor }} />
           </Field>
@@ -2667,7 +2667,7 @@ function PresupuestoEditor({ catalog, setCatalog, guardarAhora, movimientos }) {
           <span style={cellStyle}>{promedios["_ingreso"] ? fmt(promedios["_ingreso"]) : "—"}</span>
           <span style={cellStyle}>{datosAnt.ingresoEsperado ? fmt(datosAnt.ingresoEsperado) : "—"}</span>
           {mostrarReal && <span style={cellStyle}>—</span>}
-          <input type="number" inputMode="decimal" value={ingresoMes || ""} onChange={(e) => actualizarIngreso(e.target.value)}
+          <input type="text" inputMode="decimal" value={ingresoMes || ""} onChange={(e) => actualizarIngreso(e.target.value)}
             placeholder="$0" style={{ ...inputBase, textAlign: "right", border: `2px solid ${SHEET.verdeBorde}`, fontSize: 12, padding: "4px 6px" }} />
         </div>
       </div>
@@ -2682,7 +2682,7 @@ function PresupuestoEditor({ catalog, setCatalog, guardarAhora, movimientos }) {
           <span style={cellStyle}>{promedios[cat] ? fmt(promedios[cat]) : "—"}</span>
           <span style={cellStyle}>{catsAnt[cat] ? fmt(catsAnt[cat]) : "—"}</span>
           {mostrarReal && <span style={{ ...cellStyle, color: realAnt[cat] > (catsAnt[cat] || 0) ? SHEET.rosaBorde : "#444" }}>{realAnt[cat] ? fmt(realAnt[cat]) : "—"}</span>}
-          <input type="number" inputMode="decimal" value={catsMes[cat] || ""} onChange={(e) => actualizarCat(cat, e.target.value)}
+          <input type="text" inputMode="decimal" value={catsMes[cat] || ""} onChange={(e) => actualizarCat(cat, e.target.value)}
             placeholder="$0" style={{ ...inputBase, textAlign: "right", border: `2px solid ${SHEET.rojo}`, fontSize: 12, padding: "4px 6px" }} />
         </div>
       ))}
@@ -3015,11 +3015,11 @@ function TDCConfigEditor({ catalog, setCatalog, guardarAhora }) {
               <div style={{ padding: "10px 12px", background: SHEET.gris, borderTop: "1px solid " + SHEET.grisBorde }}>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   <Field label="Límite de crédito">
-                    <input type="number" inputMode="decimal" value={form.limite || ""} onChange={(e) => setForm((p) => ({ ...p, limite: e.target.value }))}
+                    <input type="text" inputMode="decimal" value={form.limite || ""} onChange={(e) => setForm((p) => ({ ...p, limite: e.target.value }))}
                       style={{ ...inputBase, border: `2px solid ${SHEET.rojo}` }} placeholder="$0.00" />
                   </Field>
                   <Field label="Día de corte (del mes)">
-                    <input type="number" inputMode="numeric" value={form.diaCiclo || ""} onChange={(e) => setForm((p) => ({ ...p, diaCiclo: e.target.value }))}
+                    <input type="text" inputMode="numeric" value={form.diaCiclo || ""} onChange={(e) => setForm((p) => ({ ...p, diaCiclo: e.target.value }))}
                       style={{ ...inputBase, border: `2px solid ${SHEET.rojo}` }} placeholder="Ej. 5, 8, 14" />
                   </Field>
                 </div>
@@ -3369,13 +3369,13 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                 <p style={{ fontSize: 12, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Datos variables de este ciclo</p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                   <Field label="Días para pagar">
-                    <input type="number" inputMode="numeric" value={formCiclo.diasPago || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, diasPago: e.target.value }))} style={inputSmall} placeholder="Ej. 20" />
+                    <input type="text" inputMode="numeric" value={formCiclo.diasPago || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, diasPago: e.target.value }))} style={inputSmall} placeholder="Ej. 20" />
                   </Field>
                   <Field label="Pago mínimo">
-                    <input type="number" inputMode="decimal" value={formCiclo.pagoMinimo || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, pagoMinimo: e.target.value }))} style={inputSmall} placeholder="$0" />
+                    <input type="text" inputMode="decimal" value={formCiclo.pagoMinimo || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, pagoMinimo: e.target.value }))} style={inputSmall} placeholder="$0" />
                   </Field>
                   <Field label="Intereses cobrados">
-                    <input type="number" inputMode="decimal" value={formCiclo.intereses || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, intereses: e.target.value }))} style={inputSmall} placeholder="$0" />
+                    <input type="text" inputMode="decimal" value={formCiclo.intereses || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, intereses: e.target.value }))} style={inputSmall} placeholder="$0" />
                   </Field>
                 </div>
                 <p style={{ fontSize: 11, color: "#666", fontStyle: "italic", margin: "6px 0 8px" }}>
@@ -4035,13 +4035,13 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                 </Field>
                 <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "0 0 8px" }}>Llena dos campos — el tercero se calcula solo.</p>
                 <Field label="Meta (total a ahorrar)">
-                  <input type="number" inputMode="decimal" value={ahoMeta} onChange={(e) => setAhoMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  <input type="text" inputMode="decimal" value={ahoMeta} onChange={(e) => setAhoMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 <Field label="Número de parcialidades">
-                  <input type="number" inputMode="numeric" value={ahoPlazo} onChange={(e) => setAhoPlazo(e.target.value)} style={inputBase} placeholder="Ej. 12" />
+                  <input type="text" inputMode="numeric" value={ahoPlazo} onChange={(e) => setAhoPlazo(e.target.value)} style={inputBase} placeholder="Ej. 12" />
                 </Field>
                 <Field label="Aportación por parcialidad">
-                  <input type="number" inputMode="decimal" value={ahoAportacion} onChange={(e) => setAhoAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  <input type="text" inputMode="decimal" value={ahoAportacion} onChange={(e) => setAhoAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 {(() => {
                   const m = parseFloat(ahoMeta) || 0, p = parseInt(ahoPlazo) || 0, a = parseFloat(ahoAportacion) || 0;
@@ -4130,13 +4130,13 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                 </Field>
                 <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "0 0 8px" }}>Llena dos campos — el tercero se calcula solo.</p>
                 <Field label="Meta (total a invertir)">
-                  <input type="number" inputMode="decimal" value={invMeta} onChange={(e) => setInvMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  <input type="text" inputMode="decimal" value={invMeta} onChange={(e) => setInvMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 <Field label="Número de parcialidades">
-                  <input type="number" inputMode="numeric" value={invPlazo} onChange={(e) => setInvPlazo(e.target.value)} style={inputBase} placeholder="Ej. 24" />
+                  <input type="text" inputMode="numeric" value={invPlazo} onChange={(e) => setInvPlazo(e.target.value)} style={inputBase} placeholder="Ej. 24" />
                 </Field>
                 <Field label="Aportación por parcialidad">
-                  <input type="number" inputMode="decimal" value={invAportacion} onChange={(e) => setInvAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  <input type="text" inputMode="decimal" value={invAportacion} onChange={(e) => setInvAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 {(() => {
                   const m = parseFloat(invMeta) || 0, p = parseInt(invPlazo) || 0, a = parseFloat(invAportacion) || 0;
@@ -4237,13 +4237,13 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                       </Field>
                     )}
                     <Field label="Monto financiado (lo que te prestaron, sin intereses)">
-                      <input type="number" inputMode="decimal" value={prbMontoFinanciado} onChange={(e) => setPrbMontoFinanciado(e.target.value)} style={inputBase} placeholder="$0.00 — solo referencia" />
+                      <input type="text" inputMode="decimal" value={prbMontoFinanciado} onChange={(e) => setPrbMontoFinanciado(e.target.value)} style={inputBase} placeholder="$0.00 — solo referencia" />
                     </Field>
                     <Field label="Pago por periodo (lo que pagas cada vez)">
-                      <input type="number" inputMode="decimal" value={prbPagoPeriodo} onChange={(e) => setPrbPagoPeriodo(e.target.value)} style={inputBase} placeholder="$0.00" />
+                      <input type="text" inputMode="decimal" value={prbPagoPeriodo} onChange={(e) => setPrbPagoPeriodo(e.target.value)} style={inputBase} placeholder="$0.00" />
                     </Field>
                     <Field label="Número de pagos (plazo total)">
-                      <input type="number" inputMode="numeric" value={prbNumPagos} onChange={(e) => setPrbNumPagos(e.target.value)} style={inputBase} placeholder="Ej. 24" />
+                      <input type="text" inputMode="numeric" value={prbNumPagos} onChange={(e) => setPrbNumPagos(e.target.value)} style={inputBase} placeholder="Ej. 24" />
                     </Field>
                     {prbPagoPeriodo && prbNumPagos && parseFloat(prbPagoPeriodo) > 0 && parseInt(prbNumPagos) > 0 && (
                       <div style={{ background: SHEET.amarillo, border: "1px solid #e6d200", borderRadius: 4, padding: "8px 10px", marginBottom: 10, fontSize: 12 }}>
@@ -4256,7 +4256,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                       </div>
                     )}
                     <Field label="Pagos ya realizados (si ya traes el crédito avanzado)">
-                      <input type="number" inputMode="numeric" value={prbPagosPrevios} onChange={(e) => setPrbPagosPrevios(e.target.value)} style={inputBase} placeholder="0" />
+                      <input type="text" inputMode="numeric" value={prbPagosPrevios} onChange={(e) => setPrbPagosPrevios(e.target.value)} style={inputBase} placeholder="0" />
                     </Field>
                     {prbPagosPrevios && parseInt(prbPagosPrevios) > 0 && prbPagoPeriodo && parseFloat(prbPagoPeriodo) > 0 && (
                       <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "-4px 0 10px" }}>
@@ -4409,13 +4409,13 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                 </Field>
                 <p style={{ fontSize: 11.5, color: "#555", fontStyle: "italic", margin: "0 0 8px" }}>Llena dos campos — el tercero se calcula solo.</p>
                 <Field label="Meta de aportación (total a dar)">
-                  <input type="number" inputMode="decimal" value={famMeta} onChange={(e) => setFamMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  <input type="text" inputMode="decimal" value={famMeta} onChange={(e) => setFamMeta(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 <Field label="Número de parcialidades">
-                  <input type="number" inputMode="numeric" value={famPlazo} onChange={(e) => setFamPlazo(e.target.value)} style={inputBase} placeholder="Ej. 12" />
+                  <input type="text" inputMode="numeric" value={famPlazo} onChange={(e) => setFamPlazo(e.target.value)} style={inputBase} placeholder="Ej. 12" />
                 </Field>
                 <Field label="Aportación por parcialidad">
-                  <input type="number" inputMode="decimal" value={famAportacion} onChange={(e) => setFamAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
+                  <input type="text" inputMode="decimal" value={famAportacion} onChange={(e) => setFamAportacion(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 {(() => {
                   const m = parseFloat(famMeta) || 0, p = parseInt(famPlazo) || 0, a = parseFloat(famAportacion) || 0;
@@ -4517,7 +4517,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                       </Field>
                     )}
                     <Field label="Costo">
-                      <input type="number" inputMode="decimal" value={segCosto} onChange={(e) => setSegCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
+                      <input type="text" inputMode="decimal" value={segCosto} onChange={(e) => setSegCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
                     </Field>
                     <Field label="Frecuencia">
                       <select value={segFrecuencia} onChange={(e) => setSegFrecuencia(e.target.value)} style={inputBase}>
@@ -4538,7 +4538,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                       </div>
                     </Field>
                     <Field label="Día de pago (1-30)">
-                      <input type="number" inputMode="numeric" min="1" max="30" value={segDia} onChange={(e) => setSegDia(e.target.value)} style={inputBase} />
+                      <input type="text" inputMode="numeric" min="1" max="30" value={segDia} onChange={(e) => setSegDia(e.target.value)} style={inputBase} />
                     </Field>
                     <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                       <Btn primary full onClick={guardarSeguro}>{editandoSegId ? "Guardar cambios" : "Agregar seguro"}</Btn>
@@ -4609,7 +4609,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                     </div>
                     {!servVariable && (
                       <Field label="Costo">
-                        <input type="number" inputMode="decimal" value={servCosto} onChange={(e) => setServCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
+                        <input type="text" inputMode="decimal" value={servCosto} onChange={(e) => setServCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
                       </Field>
                     )}
                     <Field label="Frecuencia">
@@ -4636,7 +4636,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                       </div>
                     </Field>
                     <Field label="Día de pago (1-30)">
-                      <input type="number" inputMode="numeric" min="1" max="30" value={servDia} onChange={(e) => setServDia(e.target.value)} style={inputBase} />
+                      <input type="text" inputMode="numeric" min="1" max="30" value={servDia} onChange={(e) => setServDia(e.target.value)} style={inputBase} />
                     </Field>
                     <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                       <Btn primary full onClick={guardarServicio}>{editandoServId ? "Guardar cambios" : "Agregar servicio"}</Btn>
@@ -4691,7 +4691,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                       </Field>
                     )}
                     <Field label="Costo">
-                      <input type="number" inputMode="decimal" value={memCosto} onChange={(e) => setMemCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
+                      <input type="text" inputMode="decimal" value={memCosto} onChange={(e) => setMemCosto(e.target.value)} style={inputBase} placeholder="$0.00" />
                     </Field>
                     <Field label="Frecuencia">
                       <select value={memFrecuencia} onChange={(e) => setMemFrecuencia(e.target.value)} style={inputBase}>
@@ -4712,7 +4712,7 @@ function CatalogosTab({ catalog, setCatalog, guardarAhora, movimientos }) {
                       </div>
                     </Field>
                     <Field label="Día de pago (1-30)">
-                      <input type="number" inputMode="numeric" min="1" max="30" value={memDia} onChange={(e) => setMemDia(e.target.value)} style={inputBase} />
+                      <input type="text" inputMode="numeric" min="1" max="30" value={memDia} onChange={(e) => setMemDia(e.target.value)} style={inputBase} />
                     </Field>
                     <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
                       <Btn primary full onClick={guardarMembresia}>{editandoMemId ? "Guardar cambios" : "Agregar membresía"}</Btn>
@@ -4895,19 +4895,19 @@ function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferi
                 <input type="text" value={formEdit.nombre || ""} onChange={(e) => setFormEdit((p) => ({ ...p, nombre: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
               </Field>
               <Field label="Capital total">
-                <input type="number" inputMode="decimal" value={formEdit.costoTotal || ""} onChange={(e) => setFormEdit((p) => ({ ...p, costoTotal: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+                <input type="text" inputMode="decimal" value={formEdit.costoTotal || ""} onChange={(e) => setFormEdit((p) => ({ ...p, costoTotal: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
               </Field>
               <Field label="Plazo (meses)">
-                <input type="number" inputMode="numeric" value={formEdit.plazoMeses || ""} onChange={(e) => setFormEdit((p) => ({ ...p, plazoMeses: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+                <input type="text" inputMode="numeric" value={formEdit.plazoMeses || ""} onChange={(e) => setFormEdit((p) => ({ ...p, plazoMeses: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
               </Field>
               <Field label="Pagos realizados">
-                <input type="number" inputMode="numeric" value={formEdit.pagos || ""} onChange={(e) => setFormEdit((p) => ({ ...p, pagos: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+                <input type="text" inputMode="numeric" value={formEdit.pagos || ""} onChange={(e) => setFormEdit((p) => ({ ...p, pagos: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
               </Field>
               <Field label="Capital pagado ($)">
-                <input type="number" inputMode="decimal" value={formEdit.pagado || ""} onChange={(e) => setFormEdit((p) => ({ ...p, pagado: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
+                <input type="text" inputMode="decimal" value={formEdit.pagado || ""} onChange={(e) => setFormEdit((p) => ({ ...p, pagado: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} />
               </Field>
               <Field label="Intereses pagados acum. ($)">
-                <input type="number" inputMode="decimal" value={formEdit.interesesPagados || ""} onChange={(e) => setFormEdit((p) => ({ ...p, interesesPagados: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} placeholder="0" />
+                <input type="text" inputMode="decimal" value={formEdit.interesesPagados || ""} onChange={(e) => setFormEdit((p) => ({ ...p, interesesPagados: e.target.value }))} style={{ ...inputBase, fontSize: 12 }} placeholder="0" />
               </Field>
             </div>
             <Field label="Descripción">
@@ -4929,10 +4929,10 @@ function DiferidosTab({ diferidos, registrarPago, editarDiferido, eliminarDiferi
           pagandoId === d.id ? (
             <div style={{ marginTop: 8, padding: "8px", background: SHEET.gris, borderRadius: 3 }}>
               <Field label="Monto del pago (capital)">
-                <input type="number" inputMode="decimal" value={montoPago} onChange={(e) => setMontoPago(e.target.value)} style={inputBase} />
+                <input type="text" inputMode="decimal" value={montoPago} onChange={(e) => setMontoPago(e.target.value)} style={inputBase} />
               </Field>
               <Field label="Intereses cobrados este periodo (opcional)">
-                <input type="number" inputMode="decimal" value={interesesPago} onChange={(e) => setInteresesPago(e.target.value)} style={inputBase} placeholder="$0.00 — ver estado de cuenta" />
+                <input type="text" inputMode="decimal" value={interesesPago} onChange={(e) => setInteresesPago(e.target.value)} style={inputBase} placeholder="$0.00 — ver estado de cuenta" />
               </Field>
               {interesesPago && parseFloat(interesesPago) > 0 && (
                 <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "-6px 0 8px" }}>
