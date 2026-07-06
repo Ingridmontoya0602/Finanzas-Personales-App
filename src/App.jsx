@@ -608,10 +608,8 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
 
   async function registrarFijosSeleccionados() {
     const seleccionados = fijosSeleccionados.filter(f => f.seleccionado);
-    // Usar el último día del mes seleccionado como fecha de registro
-    const [y, m] = mesFijos.split("-").map(Number);
-    const ultimoDia = new Date(y, m, 0).getDate();
-    const fechaReg = `${mesFijos}-${String(ultimoDia).padStart(2, "0")}`;
+    // Usar fecha de hoy para registrar, no el último día del mes
+    const fechaReg = todayISO();
     for (const f of seleccionados) {
       await addMovimiento({
         mov: "Egreso", metodo: f.metodo, cuenta: f.cuenta,
@@ -621,27 +619,30 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
       });
     }
     const totalFijosEgresados = seleccionados.reduce((s, f) => s + f.monto, 0);
-    if (ajusteTDD && parseFloat(ajusteTDD) >= 0) {
-      const necesario = parseFloat(ajusteTDD) + totalFijosEgresados;
+    // Ajuste TDD — solo si se especificó
+    if (ajusteTDD !== "" && parseFloat(ajusteTDD) >= 0) {
+      const necesario = Math.round((parseFloat(ajusteTDD) + totalFijosEgresados) * 100) / 100;
       if (necesario > 0) {
         await addMovimiento({
           mov: "Ingreso", metodo: "TDD", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
-          subcategoria: "", descripcion: `Ajuste de saldo TDD - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: necesario
+          subcategoria: "", descripcion: `⬆ Ajuste positivo TDD - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: necesario
         });
       }
     }
-    if (ajusteEfectivo && parseFloat(ajusteEfectivo) > 0) {
+    // Ajuste Efectivo
+    if (ajusteEfectivo !== "" && parseFloat(ajusteEfectivo) > 0) {
       await addMovimiento({
         mov: "Ingreso", metodo: "Efectivo", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
-        subcategoria: "", descripcion: `Ajuste de saldo Efectivo - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: parseFloat(ajusteEfectivo)
+        subcategoria: "", descripcion: `⬆ Ajuste positivo Efectivo - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: parseFloat(ajusteEfectivo)
       });
     }
-    for (const [tarjeta, saldoStr] of Object.entries(ajusteTDC)) {
-      const saldo = parseFloat(saldoStr);
-      if (!isNaN(saldo) && saldo >= 0) {
+    // Ajuste TDC — registrar cargos post corte como egreso
+    for (const [tarjeta, val] of Object.entries(ajusteTDC)) {
+      const cargos = parseFloat(val.cargosPostCorte);
+      if (!isNaN(cargos) && cargos > 0) {
         await addMovimiento({
-          mov: "Ingreso", metodo: "TDC", cuenta: tarjeta, tipo: "Otro(a)", categoria: "Ajuste",
-          subcategoria: "", descripcion: `Ajuste saldo TDC ${tarjeta} - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: saldo
+          mov: "Egreso", metodo: "TDC", cuenta: tarjeta, tipo: "G. Variable", categoria: "Ajuste",
+          subcategoria: "", descripcion: `⬇ Ajuste cargos ciclo ${tarjeta} - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: cargos
         });
       }
     }
@@ -725,34 +726,65 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
               {/* Ajuste de saldo */}
               <div style={{ marginTop: 14, padding: "12px", background: SHEET.azul, borderRadius: 4, border: "1px solid " + SHEET.azulBorde }}>
                 <p style={{ fontSize: 12, fontWeight: 700, margin: "0 0 4px" }}>Ajuste de saldo (opcional)</p>
-                <p style={{ fontSize: 11, color: "#555", margin: "0 0 10px" }}>
-                  Dime cuánto tienes ahorita en cada cuenta y registro el ingreso de ajuste para que cuadre.
-                </p>
+
+                {/* TDD */}
+                <p style={{ fontSize: 11, fontWeight: 700, margin: "8px 0 4px", color: "#333" }}>TDD</p>
                 <Field label="¿Cuánto tienes en TDD ahorita?">
                   <input type="text" inputMode="decimal" value={ajusteTDD} onChange={e => setAjusteTDD(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
                 {ajusteTDD !== "" && parseFloat(ajusteTDD) >= 0 && (
                   <div style={{ background: "#fff", borderRadius: 4, padding: "8px 10px", marginTop: 4, marginBottom: 8, fontSize: 11 }}>
-                    <p style={{ margin: "0 0 2px" }}>Fijos a restar: <b style={{ color: SHEET.rosaBorde }}>−{fmt(totalFijosModal)}</b></p>
+                    <p style={{ margin: "0 0 2px" }}>Fijos TDD a restar: <b style={{ color: SHEET.rosaBorde }}>−{fmt(fijosSeleccionados.filter(f => f.seleccionado && f.metodo === "TDD").reduce((s,f)=>s+f.monto,0))}</b></p>
                     <p style={{ margin: "0 0 2px" }}>Saldo deseado: <b style={{ color: SHEET.verdeBorde }}>{fmt(parseFloat(ajusteTDD))}</b></p>
-                    <p style={{ margin: 0, fontWeight: 700 }}>Ingreso de ajuste TDD: <b style={{ color: SHEET.azulBorde }}>{fmt(parseFloat(ajusteTDD) + totalFijosModal)}</b></p>
+                    <p style={{ margin: 0, fontWeight: 700 }}>Ingreso de ajuste TDD: <b style={{ color: SHEET.azulBorde }}>{fmt(Math.round((parseFloat(ajusteTDD) + fijosSeleccionados.filter(f=>f.seleccionado&&f.metodo==="TDD").reduce((s,f)=>s+f.monto,0))*100)/100)}</b></p>
                   </div>
                 )}
+
                 <Field label="¿Cuánto tienes en Efectivo? (opcional)">
                   <input type="text" inputMode="decimal" value={ajusteEfectivo} onChange={e => setAjusteEfectivo(e.target.value)} style={inputBase} placeholder="$0.00" />
                 </Field>
+
                 {/* TDC por tarjeta */}
                 {(catalog.tarjetasTDC || []).filter(t => t.activa !== false).length > 0 && (
-                  <div style={{ marginTop: 8 }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 6px", color: "#555" }}>¿Cuánto tienes disponible en cada TDC?</p>
-                    {(catalog.tarjetasTDC || []).filter(t => t.activa !== false).map(t => (
-                      <Field key={t.nombre} label={t.nombre}>
-                        <input type="text" inputMode="decimal"
-                          value={ajusteTDC[t.nombre] || ""}
-                          onChange={e => setAjusteTDC(prev => ({ ...prev, [t.nombre]: e.target.value }))}
-                          style={inputBase} placeholder="$0.00" />
-                      </Field>
-                    ))}
+                  <div style={{ marginTop: 10 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 4px", color: "#333" }}>TDC — Ajuste por ciclo</p>
+                    <p style={{ fontSize: 10.5, color: "#666", margin: "0 0 8px", fontStyle: "italic" }}>
+                      Para cada tarjeta, dinos el disponible actual y los cargos que hiciste después del corte del mes seleccionado. La app registra esos cargos del ciclo nuevo.
+                    </p>
+                    {(catalog.tarjetasTDC || []).filter(t => t.activa !== false).map(t => {
+                      const val = ajusteTDC[t.nombre] || { disponible: "", cargosPostCorte: "" };
+                      const limite = t.limite || 0;
+                      const difActivos = (catalog.diferidos || []).filter(d => d.activo && d.tarjeta === t.nombre);
+                      const difPend = difActivos.reduce((s, d) => {
+                        const base = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
+                        return s + Math.max(0, base - (d.pagado || 0));
+                      }, 0);
+                      const dispApp = Math.max(0, limite - difPend);
+                      const dispBanco = parseFloat(val.disponible) || 0;
+                      const cargosPost = parseFloat(val.cargosPostCorte) || 0;
+                      const ajusteCalculado = cargosPost > 0 ? cargosPost : 0;
+                      return (
+                        <div key={t.nombre} style={{ background: "#fff", borderRadius: 4, padding: "10px", marginBottom: 8, border: "1px solid " + SHEET.grisBorde }}>
+                          <p style={{ fontSize: 12, fontWeight: 700, margin: "0 0 6px" }}>{t.nombre}</p>
+                          <p style={{ fontSize: 10, color: "#888", margin: "0 0 6px" }}>Disponible según app: <b style={{ color: SHEET.verdeBorde }}>{fmt(dispApp)}</b></p>
+                          <Field label="Disponible actual (lo que muestra el banco)">
+                            <input type="text" inputMode="decimal" value={val.disponible}
+                              onChange={e => setAjusteTDC(prev => ({ ...prev, [t.nombre]: { ...val, disponible: e.target.value } }))}
+                              style={{ ...inputBase, fontSize: 13 }} placeholder="$0.00" />
+                          </Field>
+                          <Field label={`Cargos nuevos después del corte de ${mesLabel(mesFijos)}`}>
+                            <input type="text" inputMode="decimal" value={val.cargosPostCorte}
+                              onChange={e => setAjusteTDC(prev => ({ ...prev, [t.nombre]: { ...val, cargosPostCorte: e.target.value } }))}
+                              style={{ ...inputBase, fontSize: 13 }} placeholder="$0.00" />
+                          </Field>
+                          {cargosPost > 0 && (
+                            <div style={{ background: SHEET.amarillo, borderRadius: 3, padding: "6px 8px", fontSize: 11, marginTop: 4 }}>
+                              <p style={{ margin: 0 }}>Se registrará un egreso de <b style={{ color: SHEET.rosaBorde }}>{fmt(ajusteCalculado)}</b> en {t.nombre} como cargos del ciclo actual</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1208,15 +1240,50 @@ function HistorialTab({ movimientos, deleteMovimiento }) {
       .sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
   }, [movimientos, filtroMes, filtroTipo, busqueda]);
 
+  function exportarPDFHistorial() {
+    const totalIng = filtrados.filter(m => m.mov === "Ingreso").reduce((s, m) => s + Number(m.cantidad), 0);
+    const totalEg = filtrados.filter(m => m.mov === "Egreso").reduce((s, m) => s + Number(m.cantidad), 0);
+    const filas = filtrados.map((m, i) => `<tr style="background:${i%2===0?'#fff':'#f9f9f9'}">
+      <td>${fmtDate(m.fecha)}</td>
+      <td>${m.categoria || ""}${m.subcategoria ? ` · ${m.subcategoria}` : ""}</td>
+      <td>${m.cuenta || ""}</td>
+      <td>${m.descripcion || ""}</td>
+      <td class="num" style="color:${m.mov==="Ingreso"?"#2e7d32":"#c62828"};font-weight:700">
+        ${m.mov==="Ingreso"?"+":"-"}${fmt(m.cantidad)}
+      </td>
+    </tr>`).join("");
+    const titulo = filtroMes !== "todos" ? `Historial ${mesLabel(filtroMes)}` : "Historial completo";
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titulo}</title>
+    <style>body{font-family:Calibri,Arial,sans-serif;padding:20px;font-size:10px}
+    h1{font-size:16px;margin:0 0 2px}p.sub{font-size:10px;color:#777;margin:0 0 12px}
+    table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:3px 6px;text-align:left}
+    th{background:#F4CCCC;font-weight:700}td.num{text-align:right}
+    .resumen{display:flex;gap:20px;margin-bottom:12px;font-size:11px}
+    .ing{color:#2e7d32;font-weight:700}.eg{color:#c62828;font-weight:700}.bal{font-weight:700}
+    @media print{body{padding:0}}</style></head>
+    <body>
+    <h1>${titulo}</h1>
+    <p class="sub">Generado el ${fmtDate(todayISO())} · ${filtrados.length} movimientos</p>
+    <div class="resumen">
+      <span>Ingresos: <span class="ing">${fmt(totalIng)}</span></span>
+      <span>Egresos: <span class="eg">${fmt(totalEg)}</span></span>
+      <span>Balance: <span class="bal" style="color:${totalIng-totalEg>=0?"#2e7d32":"#c62828"}">${fmt(totalIng-totalEg)}</span></span>
+    </div>
+    <table><thead><tr><th>Fecha</th><th>Concepto</th><th>Cuenta</th><th>Descripción</th><th class="num">Monto</th></tr></thead>
+    <tbody>${filas}</tbody></table>
+    <script>window.onload=()=>{window.print();}</script></body></html>`;
+    const v = window.open("","_blank"); if(v){v.document.write(html);v.document.close();}
+  }
+
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
       <Field label="Buscar">
         <input type="text" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Categoría, lugar, descripción..." style={inputBase} />
       </Field>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
         <select value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)} style={inputBase}>
           <option value="todos">Todos los meses</option>
-          {meses.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+          {meses.map((m) => <option key={m} value={m}>{mesLabel(m)}</option>)}
         </select>
         <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} style={inputBase}>
           <option value="todos">Todos</option>
@@ -1224,28 +1291,41 @@ function HistorialTab({ movimientos, deleteMovimiento }) {
           <option value="Egreso">Egresos</option>
         </select>
       </div>
+      <button onClick={exportarPDFHistorial} style={{
+        width: "100%", padding: "9px", marginBottom: 14, fontSize: 12, fontWeight: 700, fontStyle: "italic",
+        border: `1px solid ${SHEET.rosaBorde}`, borderRadius: 3, background: SHEET.rosa, cursor: "pointer", fontFamily: SHEET.fuente
+      }}>📄 Descargar PDF del historial ({filtrados.length} movimientos)</button>
 
       {filtrados.length === 0 && <p style={{ fontSize: 13, color: "#666", textAlign: "center", padding: "2rem 0", fontStyle: "italic" }}>No hay movimientos que coincidan.</p>}
 
       <div style={{ border: filtrados.length ? "1px solid " + SHEET.grisBorde : "none", borderRadius: 4, overflow: "hidden" }}>
-        {filtrados.map((m, i) => (
+        {filtrados.map((m, i) => {
+          // Label especial para ajustes
+          const esAjuste = m.categoria === "Ajuste";
+          const labelAjuste = esAjuste ? (m.mov === "Ingreso" ? "⬆ Ajuste positivo" : "⬇ Ajuste negativo") : null;
+          return (
           <div key={m.id} style={{
-            background: i % 2 === 0 ? "#fff" : SHEET.gris, borderTop: i === 0 ? "none" : "1px solid " + SHEET.grisBorde,
+            background: esAjuste ? (m.mov === "Ingreso" ? "#f0fdf4" : "#fff5f5") : i % 2 === 0 ? "#fff" : SHEET.gris,
+            borderTop: i === 0 ? "none" : "1px solid " + SHEET.grisBorde,
             borderLeft: `3px solid ${m.mov === "Ingreso" ? SHEET.verdeBorde : SHEET.rosaBorde}`, padding: "10px 12px",
             display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8
           }}>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <p style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>{m.categoria}{m.subcategoria ? ` · ${m.subcategoria}` : ""}</p>
+              <p style={{ fontSize: 13, fontWeight: 700, margin: 0, color: esAjuste ? (m.mov === "Ingreso" ? SHEET.verdeBorde : SHEET.rosaBorde) : "#222" }}>
+                {labelAjuste || `${m.categoria}${m.subcategoria ? ` · ${m.subcategoria}` : ""}`}
+              </p>
+              {esAjuste && m.descripcion && <p style={{ fontSize: 11, color: "#666", margin: "1px 0 0", fontStyle: "italic" }}>{m.descripcion}</p>}
               <p style={{ fontSize: 11, color: "#555", margin: 0, fontStyle: "italic", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {fmtDate(m.fecha)} · {m.cuenta}{m.descripcion ? ` · ${m.descripcion}` : ""}{m.lugar && !m.lugar.startsWith("__diferido:") ? ` · ${m.lugar}` : ""}
+                {fmtDate(m.fecha)}{m.cuenta ? ` · ${m.cuenta}` : ""}{!esAjuste && m.descripcion ? ` · ${m.descripcion}` : ""}{m.lugar && !m.lugar.startsWith("__diferido:") ? ` · ${m.lugar}` : ""}
               </p>
             </div>
             <div style={{ textAlign: "right", display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontWeight: 700, fontSize: 14 }}>{m.mov === "Ingreso" ? "+" : "-"}{fmt(m.cantidad)}</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: m.mov === "Ingreso" ? SHEET.verdeBorde : SHEET.rosaBorde }}>{m.mov === "Ingreso" ? "+" : "-"}{fmt(m.cantidad)}</span>
               <button aria-label="Eliminar" onClick={() => deleteMovimiento(m.id)} style={{ background: "none", border: "none", cursor: "pointer", color: SHEET.rosaBorde, padding: 4 }}>✕</button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
