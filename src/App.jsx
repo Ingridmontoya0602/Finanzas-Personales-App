@@ -83,7 +83,8 @@ const DEFAULT_CATALOG = {
   diferidos: [],
   ahorros: [],
   inversiones: [],
-  _bannerVisto: false
+  _bannerVisto: false,
+  _nombre: ""
 };
 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -307,7 +308,34 @@ function TabBar({ tab, setTab, onLogout, userEmail }) {
   );
 }
 
-function CuentaTab({ userEmail, movimientos, onLogout }) {
+function NombreModal({ onGuardar }) {
+  const [nombre, setNombre] = useState("");
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "#fff", borderRadius: 8, padding: 24, width: "100%", maxWidth: 360, fontFamily: SHEET.fuente, textAlign: "center" }}>
+        <p style={{ fontSize: 28, margin: "0 0 8px" }}>👋</p>
+        <p style={{ fontSize: 18, fontWeight: 700, margin: "0 0 6px" }}>¡Bienvenida a tu app!</p>
+        <p style={{ fontSize: 13, color: "#666", margin: "0 0 18px" }}>¿Cómo te llamas? Para personalizarla.</p>
+        <input
+          type="text" value={nombre} onChange={e => setNombre(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && nombre.trim() && onGuardar(nombre.trim())}
+          placeholder="Tu nombre..." autoFocus
+          style={{ ...inputBase, fontSize: 16, textAlign: "center", marginBottom: 14 }}
+        />
+        <button
+          onClick={() => nombre.trim() && onGuardar(nombre.trim())}
+          disabled={!nombre.trim()}
+          style={{ width: "100%", padding: "12px", fontSize: 14, fontWeight: 700, fontStyle: "italic", border: "none", borderRadius: 4, background: nombre.trim() ? SHEET.amarillo : SHEET.gris, color: SHEET.texto, cursor: nombre.trim() ? "pointer" : "not-allowed", fontFamily: SHEET.fuente }}>
+          Entrar →
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CuentaTab({ userEmail, movimientos, onLogout, catalog, onNombreChange }) {
+  const [editandoNombre, setEditandoNombre] = useState(false);
+  const [nuevoNombre, setNuevoNombre] = useState(catalog._nombre || "");
   const totalMovimientos = movimientos.length;
   const primerMov = movimientos.length > 0 ? movimientos.reduce((min, m) => m.fecha < min ? m.fecha : min, movimientos[0].fecha) : null;
   return (
@@ -317,8 +345,23 @@ function CuentaTab({ userEmail, movimientos, onLogout }) {
         <div style={{ width: 64, height: 64, borderRadius: "50%", background: SHEET.amarillo, border: `2px solid ${SHEET.amarilloBorde}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: 28 }}>
           👤
         </div>
-        <p style={{ fontSize: 15, fontWeight: 700, margin: "0 0 4px" }}>{userEmail}</p>
-        <p style={{ fontSize: 11, color: "#888", margin: 0 }}>Finanzas Personales</p>
+        {editandoNombre ? (
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 6 }}>
+            <input type="text" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)}
+              style={{ ...inputBase, width: "auto", flex: 1, maxWidth: 180, textAlign: "center", fontSize: 15 }} autoFocus />
+            <button onClick={() => { onNombreChange(nuevoNombre.trim()); setEditandoNombre(false); }}
+              style={{ padding: "8px 12px", background: SHEET.verde, border: "1px solid " + SHEET.verdeBorde, borderRadius: 4, cursor: "pointer", fontWeight: 700, fontFamily: SHEET.fuente }}>✓</button>
+            <button onClick={() => setEditandoNombre(false)}
+              style={{ padding: "8px 12px", background: SHEET.gris, border: "1px solid " + SHEET.grisBorde, borderRadius: 4, cursor: "pointer", fontFamily: SHEET.fuente }}>✕</button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 4 }}>
+            <p style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>{catalog._nombre || "Sin nombre"}</p>
+            <button onClick={() => { setNuevoNombre(catalog._nombre || ""); setEditandoNombre(true); }}
+              style={{ fontSize: 11, padding: "2px 8px", background: "none", border: "1px solid " + SHEET.grisBorde, borderRadius: 3, cursor: "pointer", color: "#888", fontFamily: SHEET.fuente }}>✎</button>
+          </div>
+        )}
+        <p style={{ fontSize: 12, color: "#888", margin: 0 }}>{userEmail}</p>
       </div>
 
       {/* Estadísticas rápidas */}
@@ -6624,10 +6667,21 @@ export default function App() {
   return (
     <div style={{ maxWidth: 480, margin: "0 auto", background: "#fff", padding: "12px 8px", fontFamily: SHEET.fuente, minHeight: "100vh" }}>
       <div style={{ textAlign: "center", marginBottom: 12 }}>
-        <h2 style={{ margin: 0, fontWeight: 700, fontStyle: "italic", fontSize: 19 }}>Finanzas Personales</h2>
+        <h2 style={{ margin: 0, fontWeight: 700, fontStyle: "italic", fontSize: 19 }}>
+          {catalog._nombre ? `Hola, ${catalog._nombre} 👋` : "Finanzas Personales"}
+        </h2>
         <p style={{ fontSize: 12, color: "#666", margin: "2px 0 0", fontStyle: "italic" }}>{session.user.email} · {movimientos.length} movimientos</p>
       </div>
       <TabBar tab={tab} setTab={setTab} onLogout={handleLogout} userEmail={session.user.email} />
+
+      {/* Modal de bienvenida — pide nombre la primera vez */}
+      {!catalog._nombre && loaded && (
+        <NombreModal onGuardar={(nombre) => {
+          const actualizado = { ...catalogRef.current, _nombre: nombre };
+          setCatalog(actualizado);
+          guardarCatalogoAhora(actualizado);
+        }} />
+      )}
       {sinDatosPropios && tab !== "catalogos" && (
         <div style={{
           position: "relative", background: SHEET.amarillo, border: `1px solid ${SHEET.amarilloBorde}`, borderRadius: 4,
@@ -6648,7 +6702,7 @@ export default function App() {
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "presupuesto" && <PresupuestoTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
-      {tab === "cuenta" && <CuentaTab userEmail={session.user.email} movimientos={movimientos} onLogout={handleLogout} />}
+      {tab === "cuenta" && <CuentaTab userEmail={session.user.email} movimientos={movimientos} onLogout={handleLogout} catalog={catalog} onNombreChange={(nombre) => { const actualizado = { ...catalogRef.current, _nombre: nombre }; setCatalog(actualizado); guardarCatalogoAhora(actualizado); }} />}
       {tab === "estado" && <EstadoMesTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "pagos-futuros" && <PagosFuturosTab catalog={catalog} movimientos={movimientos} />}
       {tab === "catalogos" && <CatalogosTab catalog={catalog} setCatalog={setCatalog} guardarAhora={guardarCatalogoAhora} movimientos={movimientos} />}
