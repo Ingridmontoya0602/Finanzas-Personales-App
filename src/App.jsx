@@ -386,10 +386,11 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
   const [saved, setSaved] = useState(false);
   const [errors, setErrors] = useState({});
   const [modalFijos, setModalFijos] = useState(false);
+  const [mesFijos, setMesFijos] = useState(todayISO().slice(0, 7));
   const [fijosSeleccionados, setFijosSeleccionados] = useState([]);
   const [ajusteTDD, setAjusteTDD] = useState("");
   const [ajusteEfectivo, setAjusteEfectivo] = useState("");
-  const [ajusteTDC, setAjusteTDC] = useState({}); // {nombreTarjeta: saldo}
+  const [ajusteTDC, setAjusteTDC] = useState({});
   const [fijosRegistrados, setFijosRegistrados] = useState(false);
 
   const cuentasDisponibles = catalog.cuentas[metodo] || [];
@@ -472,10 +473,9 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
 
   // Construir lista de fijos del mes actual
   const hoyMes = todayISO().slice(0, 7);
-  function buildFijosList() {
+  function buildFijosList(mes) {
     const items = [];
-    const mesActualStr = todayISO().slice(0, 7);
-    const [y, m] = mesActualStr.split("-").map(Number);
+    const [y, m] = mes.split("-").map(Number);
     const diasEnMes = new Date(y, m, 0).getDate();
 
     // Membresías activas
@@ -504,7 +504,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
         // Agregar una entrada por cada día de pago del mes
         diasEsp.forEach((dia, i) => {
           const diaReal = dia === 31 ? diasEnMes : Math.min(dia, diasEnMes);
-          const fechaStr = `${mesActualStr}-${String(diaReal).padStart(2, "0")}`;
+          const fechaStr = `${mes}-${String(diaReal).padStart(2, "0")}`;
           items.push({ id: `prest-${p.id}-${i}`, nombre: p.nombre, categoria: "Préstamos", tipo: "Préstamo", metodo: p.metodo || "TDD", cuenta: p.cuenta || "", monto: p.pagoPeriodo || 0, label: "Préstamo", detalle: `día ${diaReal}` });
         });
       } else {
@@ -523,25 +523,14 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
   }
 
   function abrirModalFijos() {
-    const lista = buildFijosList();
-    const mesActualStr = todayISO().slice(0, 7);
-
-    // Buscar movimientos ya registrados este mes
-    const movsMes = (movimientos || []).filter(m => m.fecha && m.fecha.startsWith(mesActualStr) && m.mov === "Egreso");
-
-    // Para cada fijo, detectar si ya fue registrado este mes
-    // Comparamos por subcategoria (nombre del fijo) — igual que como los registramos
-    // Para quincenales con detalle (día X), contamos cuántas veces aparece ese nombre
-    // y marcamos como "ya pagado" según cuántas veces se detecten
+    const lista = buildFijosList(mesFijos);
+    // Buscar movimientos ya registrados en el mes seleccionado
+    const movsMesFijos = (movimientos || []).filter(m => m.fecha && m.fecha.startsWith(mesFijos) && m.mov === "Egreso");
     const conteoNombre = {};
-    movsMes.forEach(m => {
+    movsMesFijos.forEach(m => {
       const key = m.subcategoria || "";
       conteoNombre[key] = (conteoNombre[key] || 0) + 1;
     });
-
-    // Asignar seleccionado=false a los que ya están registrados
-    // Para quincenales (mismo nombre, 2 entradas), la 1ra aparición se marca como pagada,
-    // la 2da solo si hay 2 registros
     const usados = {};
     const listaConEstatus = lista.map(f => {
       const yaUsados = usados[f.nombre] || 0;
@@ -550,47 +539,66 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
       usados[f.nombre] = yaUsados + 1;
       return { ...f, seleccionado: !yaPagado, yaPagado };
     });
-
     setFijosSeleccionados(listaConEstatus);
     setAjusteTDD(""); setAjusteEfectivo(""); setAjusteTDC({}); setFijosRegistrados(false);
     setModalFijos(true);
   }
 
+  // Recalcular lista cuando cambia el mes en el modal
+  function cambiarMesFijos(nuevoMes) {
+    setMesFijos(nuevoMes);
+    const lista = buildFijosList(nuevoMes);
+    const movsMesFijos = (movimientos || []).filter(m => m.fecha && m.fecha.startsWith(nuevoMes) && m.mov === "Egreso");
+    const conteoNombre = {};
+    movsMesFijos.forEach(m => { const key = m.subcategoria || ""; conteoNombre[key] = (conteoNombre[key] || 0) + 1; });
+    const usados = {};
+    const listaConEstatus = lista.map(f => {
+      const yaUsados = usados[f.nombre] || 0;
+      const totalRegistrados = conteoNombre[f.nombre] || 0;
+      const yaPagado = yaUsados < totalRegistrados;
+      usados[f.nombre] = yaUsados + 1;
+      return { ...f, seleccionado: !yaPagado, yaPagado };
+    });
+    setFijosSeleccionados(listaConEstatus);
+    setFijosRegistrados(false);
+  }
+
   async function registrarFijosSeleccionados() {
     const seleccionados = fijosSeleccionados.filter(f => f.seleccionado);
+    // Usar el último día del mes seleccionado como fecha de registro
+    const [y, m] = mesFijos.split("-").map(Number);
+    const ultimoDia = new Date(y, m, 0).getDate();
+    const fechaReg = `${mesFijos}-${String(ultimoDia).padStart(2, "0")}`;
     for (const f of seleccionados) {
       await addMovimiento({
         mov: "Egreso", metodo: f.metodo, cuenta: f.cuenta,
         tipo: f.tipo, categoria: f.categoria, subcategoria: f.nombre,
-        descripcion: `Registro automático ${hoyMes}${f.detalle ? ` (${f.detalle})` : ""}`, lugar: "", fecha: todayISO(), cantidad: f.monto
+        descripcion: `Registro automático ${mesFijos}${f.detalle ? ` (${f.detalle})` : ""}`,
+        lugar: "", fecha: fechaReg, cantidad: f.monto
       });
     }
     const totalFijosEgresados = seleccionados.reduce((s, f) => s + f.monto, 0);
-    // Ajuste TDD
     if (ajusteTDD && parseFloat(ajusteTDD) >= 0) {
-      const saldoActual = parseFloat(ajusteTDD);
-      const necesario = saldoActual + totalFijosEgresados;
+      const necesario = parseFloat(ajusteTDD) + totalFijosEgresados;
       if (necesario > 0) {
         await addMovimiento({
           mov: "Ingreso", metodo: "TDD", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
-          subcategoria: "", descripcion: `Ajuste de saldo TDD - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: necesario
+          subcategoria: "", descripcion: `Ajuste de saldo TDD - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: necesario
         });
       }
     }
-    // Ajuste Efectivo
     if (ajusteEfectivo && parseFloat(ajusteEfectivo) > 0) {
       await addMovimiento({
         mov: "Ingreso", metodo: "Efectivo", cuenta: "", tipo: "Otro(a)", categoria: "Ajuste",
-        subcategoria: "", descripcion: `Ajuste de saldo Efectivo - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: parseFloat(ajusteEfectivo)
+        subcategoria: "", descripcion: `Ajuste de saldo Efectivo - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: parseFloat(ajusteEfectivo)
       });
     }
-    // Ajuste TDC por tarjeta
     for (const [tarjeta, saldoStr] of Object.entries(ajusteTDC)) {
       const saldo = parseFloat(saldoStr);
       if (!isNaN(saldo) && saldo >= 0) {
         await addMovimiento({
           mov: "Ingreso", metodo: "TDC", cuenta: tarjeta, tipo: "Otro(a)", categoria: "Ajuste",
-          subcategoria: "", descripcion: `Ajuste saldo TDC ${tarjeta} - ${hoyMes}`, lugar: "", fecha: todayISO(), cantidad: saldo
+          subcategoria: "", descripcion: `Ajuste saldo TDC ${tarjeta} - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: saldo
         });
       }
     }
@@ -620,12 +628,24 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 100, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "16px 12px", overflowY: "auto" }}>
           <div style={{ background: "#fff", borderRadius: 6, width: "100%", maxWidth: 500, fontFamily: SHEET.fuente, maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
             {/* Header */}
-            <div style={{ padding: "14px 16px", borderBottom: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-              <div>
-                <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>⚡ Registrar fijos del mes</p>
-                <p style={{ fontSize: 11, color: "#888", margin: "2px 0 0" }}>Desmarca los que ya registraste</p>
+            <div style={{ padding: "14px 16px", borderBottom: "1px solid " + SHEET.grisBorde, flexShrink: 0 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <div>
+                  <p style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>⚡ Registrar fijos del mes</p>
+                  <p style={{ fontSize: 11, color: "#888", margin: "2px 0 0" }}>Desmarca los que ya registraste</p>
+                </div>
+                <button onClick={() => setModalFijos(false)} style={{ fontSize: 18, background: "none", border: "none", cursor: "pointer", color: "#666" }}>✕</button>
               </div>
-              <button onClick={() => setModalFijos(false)} style={{ fontSize: 18, background: "none", border: "none", cursor: "pointer", color: "#666" }}>✕</button>
+              {/* Selector de mes */}
+              <select value={mesFijos} onChange={(e) => cambiarMesFijos(e.target.value)}
+                style={{ ...inputBase, background: SHEET.azul, fontSize: 13, fontWeight: 700 }}>
+                {Array.from({ length: 12 }, (_, i) => {
+                  const d = new Date();
+                  d.setMonth(d.getMonth() - i);
+                  const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+                  return <option key={ym} value={ym}>{mesLabel(ym)}</option>;
+                })}
+              </select>
             </div>
 
             {/* Lista scrolleable */}
