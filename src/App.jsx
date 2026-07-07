@@ -636,14 +636,40 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
         subcategoria: "", descripcion: `⬆ Ajuste positivo Efectivo - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: parseFloat(ajusteEfectivo)
       });
     }
-    // Ajuste TDC — registrar cargos post corte como egreso
+    // Ajuste TDC — registrar cargos del corte anterior Y gastos post corte
     for (const [tarjeta, val] of Object.entries(ajusteTDC)) {
-      const cargos = parseFloat(val.cargosPostCorte);
-      if (!isNaN(cargos) && cargos > 0) {
-        await addMovimiento({
-          mov: "Egreso", metodo: "TDC", cuenta: tarjeta, tipo: "G. Variable", categoria: "Ajuste",
-          subcategoria: "", descripcion: `⬇ Ajuste cargos ciclo ${tarjeta} - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: cargos
-        });
+      const tarjetaData = (catalog.tarjetasTDC || []).find(t => t.nombre === tarjeta);
+      const limite = tarjetaData?.limite || 0;
+      const difActivos = (catalog.diferidos || []).filter(d => d.activo && d.tarjeta === tarjeta);
+      const difPend = Math.round(difActivos.reduce((s, d) => {
+        const base = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
+        return s + Math.max(0, base - (d.pagado || 0));
+      }, 0) * 100) / 100;
+      const dispBanco = val.disponible !== "" ? parseFloat(val.disponible) : null;
+      const cargosPost = parseFloat(val.cargosPostCorte) || 0;
+
+      if (dispBanco !== null) {
+        const totalUtilizado = Math.round((limite - dispBanco) * 100) / 100;
+        const cargosCorteAnterior = Math.max(0, Math.round((totalUtilizado - difPend - cargosPost) * 100) / 100);
+
+        // Registrar cargos del corte ANTERIOR (fecha del último día del mes anterior)
+        if (cargosCorteAnterior > 0) {
+          const [y, m] = mesFijos.split("-").map(Number);
+          const ultimoMesAnt = new Date(y, m - 1, 0);
+          const fechaCorteAnt = `${ultimoMesAnt.getFullYear()}-${String(ultimoMesAnt.getMonth() + 1).padStart(2, "0")}-${String(ultimoMesAnt.getDate()).padStart(2, "0")}`;
+          await addMovimiento({
+            mov: "Egreso", metodo: "TDC", cuenta: tarjeta, tipo: "Pago TDC", categoria: "Pago TDC",
+            subcategoria: "", descripcion: `⬇ Ajuste corte anterior ${tarjeta}`, lugar: "", fecha: fechaCorteAnt, cantidad: cargosCorteAnterior
+          });
+        }
+
+        // Registrar gastos POST corte (del ciclo actual)
+        if (cargosPost > 0) {
+          await addMovimiento({
+            mov: "Egreso", metodo: "TDC", cuenta: tarjeta, tipo: "G. Variable", categoria: "Ajuste",
+            subcategoria: "", descripcion: `⬇ Ajuste gastos post corte ${tarjeta} - ${mesFijos}`, lugar: "", fecha: fechaReg, cantidad: cargosPost
+          });
+        }
       }
     }
     setFijosRegistrados(true);
@@ -755,31 +781,46 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                       const val = ajusteTDC[t.nombre] || { disponible: "", cargosPostCorte: "" };
                       const limite = t.limite || 0;
                       const difActivos = (catalog.diferidos || []).filter(d => d.activo && d.tarjeta === t.nombre);
-                      const difPend = difActivos.reduce((s, d) => {
+                      const difPend = Math.round(difActivos.reduce((s, d) => {
                         const base = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
                         return s + Math.max(0, base - (d.pagado || 0));
-                      }, 0);
-                      const dispApp = Math.max(0, limite - difPend);
-                      const dispBanco = parseFloat(val.disponible) || 0;
+                      }, 0) * 100) / 100;
+                      const dispBanco = val.disponible !== "" ? parseFloat(val.disponible) : null;
                       const cargosPost = parseFloat(val.cargosPostCorte) || 0;
-                      const ajusteCalculado = cargosPost > 0 ? cargosPost : 0;
+                      // Cálculo:
+                      // Total utilizado = Límite - Disponible banco
+                      // Cargos corte anterior = Total utilizado - Diferidos - Cargos post corte
+                      const totalUtilizado = dispBanco !== null ? Math.round((limite - dispBanco) * 100) / 100 : null;
+                      const cargosCorteAnterior = totalUtilizado !== null ? Math.max(0, Math.round((totalUtilizado - difPend - cargosPost) * 100) / 100) : null;
                       return (
                         <div key={t.nombre} style={{ background: "#fff", borderRadius: 4, padding: "10px", marginBottom: 8, border: "1px solid " + SHEET.grisBorde }}>
                           <p style={{ fontSize: 12, fontWeight: 700, margin: "0 0 6px" }}>{t.nombre}</p>
-                          <p style={{ fontSize: 10, color: "#888", margin: "0 0 6px" }}>Disponible según app: <b style={{ color: SHEET.verdeBorde }}>{fmt(dispApp)}</b></p>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, marginBottom: 8, fontSize: 10.5 }}>
+                            <span style={{ color: "#888" }}>Límite: <b>{fmt(limite)}</b></span>
+                            <span style={{ color: "#888" }}>Difs pendientes: <b style={{ color: SHEET.rosaBorde }}>{fmt(difPend)}</b></span>
+                          </div>
                           <Field label="Disponible actual (lo que muestra el banco)">
                             <input type="text" inputMode="decimal" value={val.disponible}
                               onChange={e => setAjusteTDC(prev => ({ ...prev, [t.nombre]: { ...val, disponible: e.target.value } }))}
                               style={{ ...inputBase, fontSize: 13 }} placeholder="$0.00" />
                           </Field>
-                          <Field label={`Cargos nuevos después del corte de ${mesLabel(mesFijos)}`}>
+                          <Field label="Gastos después del corte del mes seleccionado (0 si ninguno)">
                             <input type="text" inputMode="decimal" value={val.cargosPostCorte}
                               onChange={e => setAjusteTDC(prev => ({ ...prev, [t.nombre]: { ...val, cargosPostCorte: e.target.value } }))}
                               style={{ ...inputBase, fontSize: 13 }} placeholder="$0.00" />
                           </Field>
-                          {cargosPost > 0 && (
-                            <div style={{ background: SHEET.amarillo, borderRadius: 3, padding: "6px 8px", fontSize: 11, marginTop: 4 }}>
-                              <p style={{ margin: 0 }}>Se registrará un egreso de <b style={{ color: SHEET.rosaBorde }}>{fmt(ajusteCalculado)}</b> en {t.nombre} como cargos del ciclo actual</p>
+                          {dispBanco !== null && (
+                            <div style={{ background: SHEET.amarillo, borderRadius: 3, padding: "8px 10px", fontSize: 11, marginTop: 6 }}>
+                              <p style={{ margin: "0 0 3px" }}>Total utilizado: <b>{fmt(totalUtilizado)}</b></p>
+                              <p style={{ margin: "0 0 3px" }}>− Diferidos: <b style={{ color: SHEET.rosaBorde }}>{fmt(difPend)}</b></p>
+                              <p style={{ margin: "0 0 3px" }}>− Gastos post corte: <b style={{ color: SHEET.rosaBorde }}>{fmt(cargosPost)}</b></p>
+                              <p style={{ margin: "0 0 3px", borderTop: "1px solid #e6d200", paddingTop: 3, fontWeight: 700 }}>
+                                Cargos del corte anterior: <b style={{ color: SHEET.rosaBorde }}>{fmt(cargosCorteAnterior)}</b>
+                              </p>
+                              <p style={{ margin: "4px 0 0", fontSize: 10, color: "#666" }}>
+                                Se registrarán {cargosCorteAnterior > 0 ? "los cargos del corte anterior" : ""}
+                                {cargosPost > 0 ? (cargosCorteAnterior > 0 ? " y " : "") + "los gastos post corte" : ""} como egresos en tu historial.
+                              </p>
                             </div>
                           )}
                         </div>
