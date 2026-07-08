@@ -3439,7 +3439,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
         const hoyStr = todayISO();
 
         // ¿El corte del ciclo seleccionado ya pasó hoy?
-        const corteYaPaso = finCiclo && finCiclo < hoyStr;
+        const corteYaPaso = finCiclo && finCiclo <= hoyStr;
 
         // Si el corte ya pasó: finCiclo es el corte anterior, y el ciclo actual empieza al día siguiente
         // Si el corte NO ha pasado: todo es el ciclo actual (aún abierto), no hay "corte anterior"
