@@ -658,7 +658,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
           const ultimoMesAnt = new Date(y, m - 1, 0);
           const fechaCorteAnt = `${ultimoMesAnt.getFullYear()}-${String(ultimoMesAnt.getMonth() + 1).padStart(2, "0")}-${String(ultimoMesAnt.getDate()).padStart(2, "0")}`;
           await addMovimiento({
-            mov: "Egreso", metodo: "TDC", cuenta: tarjeta, tipo: "Pago TDC", categoria: "Pago TDC",
+            mov: "Egreso", metodo: "TDC", cuenta: tarjeta, tipo: "G. Variable", categoria: "Ajuste",
             subcategoria: "", descripcion: `⬇ Ajuste corte anterior ${tarjeta}`, lugar: "", fecha: fechaCorteAnt, cantidad: cargosCorteAnterior
           });
         }
@@ -3446,7 +3446,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
         const cargosEnCiclo = r2(movimientos.filter(m =>
           m.mov === "Egreso" && m.cuenta === t.nombre &&
           m.fecha >= inicioCiclo && m.fecha <= finCiclo &&
-          m.tipo !== "Pago TDC"
+          (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste"))
         ).reduce((s, m) => s + Number(m.cantidad), 0));
 
         // Pagado después del corte (solo aplica si el corte ya pasó)
