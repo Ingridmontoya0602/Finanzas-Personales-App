@@ -3431,18 +3431,38 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
       )}
       {tarjetas.map((t) => {
         const { inicioCiclo, finCiclo, fechaPago } = fechasCiclo(t);
-        const { gasto, diferidos, regulares } = calcularGastoCiclo(t.nombre, inicioCiclo, finCiclo);
         const ciclo = ciclosMes[t.nombre] || {};
-        const adelanto = calcularAdelanto(t.nombre, inicioCiclo, finCiclo);
-        const reembolso = calcularReembolso(t.nombre, inicioCiclo, finCiclo);
-        const pagado = calcularPagado(t.nombre, finCiclo, fechaPago);
-        const pagoSinInt = r2(Math.max(0, gasto + (ciclo.intereses || 0) + adelanto - reembolso));
-        const restante = r2(pagoSinInt - pagado);
         const editando = editandoCicloId === t.nombre;
         const difActivos = diferidosActivosDe(t.nombre);
         const totalDifPendiente = r2(difActivos.reduce((s, d) => s + saldoPendienteDiferido(d), 0));
-        const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - restante));
         const verDifs = verDiferidosId === t.nombre;
+
+        // Corte anterior: gastos del ciclo cerrado (inicio → fin del ciclo seleccionado)
+        const cargosCorteAnterior = r2(movimientos.filter(m =>
+          m.mov === "Egreso" && m.cuenta === t.nombre &&
+          m.fecha >= inicioCiclo && m.fecha <= finCiclo &&
+          m.tipo !== "Pago TDC"
+        ).reduce((s, m) => s + Number(m.cantidad), 0));
+
+        // Pagado del corte anterior (pagos DESPUÉS del fin del ciclo hasta fecha límite)
+        const pagadoCorteAnt = calcularPagado(t.nombre, finCiclo, fechaPago);
+        const pendienteCorteAnt = r2(Math.max(0, cargosCorteAnterior - pagadoCorteAnt));
+
+        // Ciclo actual: gastos DESPUÉS del fin del ciclo anterior hasta hoy
+        const hoyStr = todayISO();
+        const inicioCicloActual = finCiclo ? (() => {
+          const d = new Date(finCiclo); d.setDate(d.getDate() + 1);
+          return d.toISOString().slice(0, 10);
+        })() : null;
+        const cargosActual = inicioCicloActual ? r2(movimientos.filter(m =>
+          m.mov === "Egreso" && m.cuenta === t.nombre &&
+          m.fecha >= inicioCicloActual && m.fecha <= hoyStr &&
+          m.tipo !== "Pago TDC"
+        ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+
+        // Disponible = Límite - Diferidos - Pendiente corte ant - Cargos ciclo actual
+        const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - pendienteCorteAnt - cargosActual));
+
         return (
           <div key={t.nombre} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
             {/* Header */}
@@ -3451,7 +3471,6 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                 <p style={{ fontSize: 14, fontWeight: 700, fontStyle: "italic", margin: 0 }}>{t.nombre}</p>
                 <p style={{ fontSize: 11, color: "#555", margin: "2px 0 0" }}>
                   Límite {fmt(t.limite)} · Corte día {t.diaCiclo}{t.anualidad ? " · Con anualidad" : ""}
-                  {ciclo.diasPago ? ` · ${ciclo.diasPago} días para pagar` : ""}
                 </p>
               </div>
               <button onClick={() => editando ? setEditandoCicloId(null) : abrirFormCiclo(t)} style={{
@@ -3461,17 +3480,21 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
             </div>
 
             {/* Disponible real */}
-            <div style={{ background: disponible > 0 ? SHEET.verde : SHEET.rosa, padding: "6px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+            <div style={{ background: disponible > (t.limite || 0) * 0.1 ? SHEET.verde : SHEET.rosa, padding: "8px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: 12, fontWeight: 700 }}>
-                  Disponible real: <span style={{ color: disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(disponible)}</span>
-                  <span style={{ fontWeight: 400, color: "#555", fontSize: 11 }}> = {fmt(t.limite)} − {fmt(totalDifPendiente)} difs − {fmt(restante)} restante</span>
-                </span>
+                <div>
+                  <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>
+                    Disponible: <span style={{ color: disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde, fontSize: 15 }}>{fmt(disponible)}</span>
+                  </p>
+                  <p style={{ fontSize: 10, color: "#666", margin: "2px 0 0" }}>
+                    {fmt(t.limite)} − {fmt(totalDifPendiente)} difs − {fmt(pendienteCorteAnt)} corte ant − {fmt(cargosActual)} ciclo actual
+                  </p>
+                </div>
                 {difActivos.length > 0 && (
                   <button onClick={() => setVerDiferidosId(verDifs ? null : t.nombre)} style={{
                     fontSize: 10.5, fontWeight: 700, fontStyle: "italic", padding: "3px 8px", borderRadius: 3, cursor: "pointer", fontFamily: SHEET.fuente,
                     border: "1px solid " + SHEET.grisBorde, background: verDifs ? SHEET.amarillo : "#fff"
-                  }}>{verDifs ? "▲ Ocultar difs" : `▼ Ver difs (${difActivos.length})`}</button>
+                  }}>{verDifs ? "▲" : `▼ Difs (${difActivos.length})`}</button>
                 )}
               </div>
               {verDifs && (
@@ -3486,19 +3509,47 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
               )}
             </div>
 
-            {/* Fechas ciclo */}
-            {inicioCiclo && (
-              <div style={{ background: SHEET.azul, padding: "5px 12px", borderBottom: "1px solid " + SHEET.azulBorde }}>
-                <p style={{ fontSize: 11, fontStyle: "italic", color: "#333", margin: 0 }}>
-                  🗓 Ciclo: {inicioCiclo} → {finCiclo}
-                  {fechaPago ? ` · Pagar antes del ${fechaPago}` : " · Captura días de pago ↑"}
-                </p>
+            {/* Resumen fijo — Límite y Diferidos */}
+            <div style={{ padding: "10px 12px", background: "#fff", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11.5 }}>
+                <div><span style={{ color: "#777", fontSize: 10 }}>Límite total</span><br /><b>{fmt(t.limite || 0)}</b></div>
+                <div><span style={{ color: "#777", fontSize: 10 }}>Diferidos pendientes</span><br /><b style={{ color: SHEET.rosaBorde }}>{fmt(totalDifPendiente)}</b></div>
               </div>
-            )}
+            </div>
+
+            {/* Corte anterior */}
+            <div style={{ padding: "10px 12px", background: SHEET.gris, borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "#555", margin: "0 0 6px", fontStyle: "italic" }}>
+                🗓 Corte anterior: {inicioCiclo ? `${fmtDate(inicioCiclo)} → ${fmtDate(finCiclo)}` : "—"}
+                {fechaPago ? <span style={{ color: SHEET.rosaBorde }}> · Pagar antes: {fmtDate(fechaPago)}</span> : " · Configura días de pago ↑"}
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5 }}>
+                <div><span style={{ color: "#777", fontSize: 10 }}>Cargos del corte</span><br /><b>{fmt(cargosCorteAnterior)}</b></div>
+                <div><span style={{ color: "#777", fontSize: 10 }}>Pagado</span><br /><b style={{ color: SHEET.verdeBorde }}>{fmt(pagadoCorteAnt)}</b></div>
+                <div><span style={{ color: "#777", fontSize: 10 }}>Pendiente</span><br />
+                  <b style={{ color: pendienteCorteAnt > 0 ? SHEET.rosaBorde : SHEET.verdeBorde, fontSize: 13 }}>
+                    {pendienteCorteAnt > 0 ? fmt(pendienteCorteAnt) : "✓ Al día"}
+                  </b>
+                </div>
+              </div>
+              {(ciclo.intereses || 0) > 0 && <p style={{ fontSize: 11, color: SHEET.rosaBorde, fontStyle: "italic", margin: "6px 0 0" }}>⚠ Intereses: {fmt(ciclo.intereses)}</p>}
+            </div>
+
+            {/* Ciclo actual */}
+            <div style={{ padding: "10px 12px", background: "#fff" }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "#555", margin: "0 0 6px", fontStyle: "italic" }}>
+                🔄 Ciclo actual (desde {inicioCicloActual ? fmtDate(inicioCicloActual) : "—"})
+              </p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11.5 }}>
+                <div><span style={{ color: "#777", fontSize: 10 }}>Cargos regulares a la fecha</span><br /><b>{fmt(cargosActual)}</b></div>
+                <div><span style={{ color: "#777", fontSize: 10 }}>Disponible restante</span><br /><b style={{ color: disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(disponible)}</b></div>
+              </div>
+              {!inicioCiclo && <p style={{ fontSize: 11, color: "#888", fontStyle: "italic", margin: "6px 0 0" }}>Configura el día de corte en Datos → Cuentas → TDC.</p>}
+            </div>
 
             {/* Formulario mensual */}
             {editando && (
-              <div style={{ background: SHEET.gris, padding: "10px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              <div style={{ background: SHEET.gris, padding: "10px 12px", borderTop: "1px solid " + SHEET.grisBorde }}>
                 <p style={{ fontSize: 12, fontWeight: 700, fontStyle: "italic", margin: "0 0 8px" }}>Datos variables de este ciclo</p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                   <Field label="Días para pagar">
@@ -3511,33 +3562,9 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                     <input type="text" inputMode="decimal" value={formCiclo.intereses || ""} onChange={(e) => setFormCiclo((p) => ({ ...p, intereses: e.target.value }))} style={inputSmall} placeholder="$0" />
                   </Field>
                 </div>
-                <p style={{ fontSize: 11, color: "#666", fontStyle: "italic", margin: "6px 0 8px" }}>
-                  Adelanto, Pagado y Reembolso se calculan automático de tu Historial.
-                </p>
-                <Btn primary full onClick={() => guardarCiclo(t.nombre)}>Guardar</Btn>
+                <Btn primary full onClick={() => guardarCiclo(t.nombre)} style={{ marginTop: 8 }}>Guardar</Btn>
               </div>
             )}
-
-            {/* Resumen ciclo */}
-            <div style={{ padding: "10px 12px", background: "#fff" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5, marginBottom: 8 }}>
-                <div><span style={{ color: "#777" }}>Gasto ciclo</span><br /><b>{fmt(gasto)}</b></div>
-                <div><span style={{ color: "#777" }}>Diferidos ciclo</span><br /><b>{fmt(diferidos)}</b></div>
-                <div><span style={{ color: "#777" }}>Regulares</span><br /><b>{fmt(regulares)}</b></div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5, marginBottom: 8 }}>
-                <div><span style={{ color: "#777" }}>Adelanto</span><br /><b>{fmt(adelanto)}</b></div>
-                <div><span style={{ color: "#777" }}>Reembolso</span><br /><b>{fmt(reembolso)}</b></div>
-                <div><span style={{ color: "#777" }}>Pago sin int.</span><br /><b>{fmt(pagoSinInt)}</b></div>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11.5 }}>
-                <div><span style={{ color: "#777" }}>Pagado</span><br /><b style={{ color: SHEET.verdeBorde }}>{fmt(pagado)}</b></div>
-                <div><span style={{ color: "#777" }}>Restante</span><br /><b style={{ color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(restante)}</b></div>
-              </div>
-              {(ciclo.intereses || 0) > 0 && <p style={{ fontSize: 11, color: SHEET.rosaBorde, fontStyle: "italic", margin: "8px 0 0" }}>⚠ Intereses cobrados: {fmt(ciclo.intereses)}</p>}
-              {(ciclo.pagoMinimo || 0) > 0 && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Pago mínimo: {fmt(ciclo.pagoMinimo)}</p>}
-              {!inicioCiclo && <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Configura el día de corte en Datos → Cuentas → TDC para ver las fechas.</p>}
-            </div>
           </div>
         );
       })}
