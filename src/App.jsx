@@ -3468,7 +3468,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
         const cargosEnCurso = !corteYaPaso ? r2(movimientos.filter(m =>
           m.mov === "Egreso" && m.cuenta === t.nombre &&
           m.fecha >= inicioCiclo && m.fecha <= hoyStr &&
-          m.tipo !== "Pago TDC"
+          (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste"))
         ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
         // Disponible = Límite - Diferidos - Pendiente corte ant - Cargos ciclo actual (o en curso)
@@ -3491,7 +3491,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
             </div>
 
             {/* Disponible real */}
-            <div style={{ background: disponible > (t.limite || 0) * 0.1 ? SHEET.verde : SHEET.rosa, padding: "8px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+            <div style={{ background: disponible > 0 ? SHEET.verde : SHEET.rosa, padding: "8px 12px", borderBottom: "1px solid " + SHEET.grisBorde }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>
