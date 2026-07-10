@@ -438,7 +438,12 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
 
   const cuentasDisponibles = catalog.cuentas[metodo] || [];
   const categoriasDisponibles = catalog.categorias[tipo] || [];
-  const subcatsDisponibles = catalog.subcategorias[categoria] || [];
+  // Para Membresías/Servicios/Seguros, las opciones salen directo del catálogo maestro
+  // (mismo array que usa el autocompletado), así nunca se desincronizan.
+  const subcatsDisponibles = categoria === "Membresías" ? (catalog.membresias || []).filter(m => m.activa).map(m => m.nombre)
+    : categoria === "Servicios" ? (catalog.servicios || []).filter(s => s.activa).map(s => s.nombre)
+    : categoria === "Seguros" ? (catalog.seguros || []).filter(s => s.activa).map(s => s.nombre)
+    : (catalog.subcategorias[categoria] || []);
   const ingresoSubsDisponibles = catalog.ingresoSub[ingresoTipo] || [];
 
   useEffect(() => { setCuenta(""); }, [metodo]);
@@ -646,7 +651,12 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
         return s + Math.max(0, base - (d.pagado || 0));
       }, 0) * 100) / 100;
       const dispBanco = val.disponible !== "" ? parseFloat(val.disponible) : null;
-      const cargosPost = parseFloat(val.cargosPostCorte) || 0;
+      const cargosPostBruto = parseFloat(val.cargosPostCorte) || 0;
+      // Los fijos de esta misma tarjeta que se están registrando en este lote (ej. Apple Bill)
+      // ya están incluidos en el total que el usuario reportó como "gastos post corte" del banco.
+      // Se restan para no duplicarlos: fijo individual + ajuste = el total real reportado.
+      const fijosMismaTarjetaEnLote = Math.round(seleccionados.filter(f => f.cuenta === tarjeta).reduce((s, f) => s + f.monto, 0) * 100) / 100;
+      const cargosPost = Math.max(0, Math.round((cargosPostBruto - fijosMismaTarjetaEnLote) * 100) / 100);
 
       if (dispBanco !== null) {
         const totalUtilizado = Math.round((limite - dispBanco) * 100) / 100;
@@ -786,10 +796,14 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                         return s + Math.max(0, base - (d.pagado || 0));
                       }, 0) * 100) / 100;
                       const dispBanco = val.disponible !== "" ? parseFloat(val.disponible) : null;
-                      const cargosPost = parseFloat(val.cargosPostCorte) || 0;
+                      const cargosPostBruto = parseFloat(val.cargosPostCorte) || 0;
+                      // Los fijos de esta tarjeta que ya están seleccionados para registrarse en este mismo lote
+                      // (ej. Apple Bill vía TDC) ya forman parte del total que el banco reporta como post-corte.
+                      const fijosMismaTarjetaEnLote = Math.round(fijosSeleccionados.filter(f => f.seleccionado && f.cuenta === t.nombre).reduce((s, f) => s + f.monto, 0) * 100) / 100;
+                      const cargosPost = Math.max(0, Math.round((cargosPostBruto - fijosMismaTarjetaEnLote) * 100) / 100);
                       // Cálculo:
                       // Total utilizado = Límite - Disponible banco
-                      // Cargos corte anterior = Total utilizado - Diferidos - Cargos post corte
+                      // Cargos corte anterior = Total utilizado - Diferidos - Cargos post corte (ya neto de fijos del lote)
                       const totalUtilizado = dispBanco !== null ? Math.round((limite - dispBanco) * 100) / 100 : null;
                       const cargosCorteAnterior = totalUtilizado !== null ? Math.max(0, Math.round((totalUtilizado - difPend - cargosPost) * 100) / 100) : null;
                       return (
@@ -809,11 +823,16 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                               onChange={e => setAjusteTDC(prev => ({ ...prev, [t.nombre]: { ...val, cargosPostCorte: e.target.value } }))}
                               style={{ ...inputBase, fontSize: 13 }} placeholder="$0.00" />
                           </Field>
+                          {fijosMismaTarjetaEnLote > 0 && (
+                            <p style={{ fontSize: 10, color: "#666", fontStyle: "italic", margin: "0 0 6px" }}>
+                              Ya se restaron {fmt(fijosMismaTarjetaEnLote)} de fijos de esta tarjeta que también seleccionaste arriba (para no duplicarlos).
+                            </p>
+                          )}
                           {dispBanco !== null && (
                             <div style={{ background: SHEET.amarillo, borderRadius: 3, padding: "8px 10px", fontSize: 11, marginTop: 6 }}>
                               <p style={{ margin: "0 0 3px" }}>Total utilizado: <b>{fmt(totalUtilizado)}</b></p>
                               <p style={{ margin: "0 0 3px" }}>− Diferidos: <b style={{ color: SHEET.rosaBorde }}>{fmt(difPend)}</b></p>
-                              <p style={{ margin: "0 0 3px" }}>− Gastos post corte: <b style={{ color: SHEET.rosaBorde }}>{fmt(cargosPost)}</b></p>
+                              <p style={{ margin: "0 0 3px" }}>− Gastos post corte (neto de fijos del lote): <b style={{ color: SHEET.rosaBorde }}>{fmt(cargosPost)}</b></p>
                               <p style={{ margin: "0 0 3px", borderTop: "1px solid #e6d200", paddingTop: 3, fontWeight: 700 }}>
                                 Cargos del corte anterior: <b style={{ color: SHEET.rosaBorde }}>{fmt(cargosCorteAnterior)}</b>
                               </p>
