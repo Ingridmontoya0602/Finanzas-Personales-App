@@ -2054,22 +2054,21 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
   const ingresoEsperado = (catalog.presupuestosMensuales || {})[mesFiltro]?.ingresoEsperado || 0;
   const totalVariablePresup = CAT_VARIABLES.reduce((s, cat) => s + (presupuestoCats[cat] || 0), 0);
 
-  // Deuda TDC total
-  const deudaTDCTotal = tarjetas.reduce((s, t) => {
-    const { inicioCiclo, finCiclo, fechaPago } = fechasCicloTDC(t);
-    const gasto = gastoCicloTDC(t.nombre, inicioCiclo, finCiclo);
-    const pagado = pagadoCicloTDC(t.nombre, finCiclo, fechaPago);
-    return s + Math.max(0, gasto - pagado);
-  }, 0);
+  // Deuda TDC: para cada tarjeta, todos los egresos TDC de esa cuenta
+  // que no han sido cubiertos por un Pago TDC. Esto incluye ajustes de cortes anteriores
+  // que pueden tener fechas fuera del ciclo del mes actual.
+  function deudaRealTarjeta(tarjetaNombre) {
+    const totalGasto = movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDC" && m.cuenta === tarjetaNombre && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0);
+    const totalPagado = movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === tarjetaNombre).reduce((s, m) => s + Number(m.cantidad), 0);
+    return Math.max(0, Math.round((totalGasto - totalPagado) * 100) / 100);
+  }
+
+  const deudaTDCTotal = tarjetas.reduce((s, t) => s + deudaRealTarjeta(t.nombre), 0);
 
   // --- Alerta Flujo de Efectivo ---
   const flujoMinimo = totalFijos;
-  const deudaTDCMes = tarjetas.reduce((s, t) => {
-    const { inicioCiclo, finCiclo, fechaPago } = fechasCicloTDC(t);
-    const gasto = gastoCicloTDC(t.nombre, inicioCiclo, finCiclo);
-    const pagado = pagadoCicloTDC(t.nombre, finCiclo, fechaPago);
-    return s + Math.max(0, gasto - pagado);
-  }, 0);
+  // deudaTDCMes = deuda real total de todas las tarjetas (pendiente por pagar)
+  const deudaTDCMes = tarjetas.reduce((s, t) => s + deudaRealTarjeta(t.nombre), 0);
   const aportacionPrestamos = (catalog.prestamosBancarios || []).filter(p => p.activa).reduce((s, p) => s + aportacionMensual(p.pagoPeriodo || 0, p.frecuencia), 0);
   const aportacionAhorro = (catalog.ahorros || []).filter(a => a.activa).reduce((s, a) => s + aportacionMensual(a.aportacion || 0, a.frecuencia), 0);
   const aportacionInversion = (catalog.inversiones || []).filter(i => i.activa).reduce((s, i) => s + aportacionMensual(i.aportacion || 0, i.frecuencia), 0);
@@ -2096,18 +2095,18 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
   }, [movimientos]);
 
   // --- Liquidez por método ---
+  // saldoInicial = 0 (la app no tiene saldo inicial bancario real configurado,
+  // acumular el historial completo produce un número engañoso).
+  // "Restante" = Ingresos mes - Egresos mes (flujo neto del mes seleccionado).
   const liquidezDetalle = useMemo(() => {
     const metodos = ["Efectivo", "TDD", "TDC"];
     return metodos.map((met) => {
       const ingMes = movsMes.filter((m) => m.mov === "Ingreso" && m.metodo === met).reduce((s, m) => s + Number(m.cantidad), 0);
       const egMes = movsMes.filter((m) => m.mov === "Egreso" && m.metodo === met).reduce((s, m) => s + Number(m.cantidad), 0);
-      const movAntes = movimientos.filter((m) => m.fecha.slice(0, 7) < mesFiltro && m.metodo === met);
-      const ingAntes = movAntes.filter(m => m.mov === "Ingreso").reduce((s, m) => s + Number(m.cantidad), 0);
-      const egAntes = movAntes.filter(m => m.mov === "Egreso").reduce((s, m) => s + Number(m.cantidad), 0);
-      const saldoInicial = Math.round((ingAntes - egAntes) * 100) / 100;
-      return { met, saldoInicial, ingMes: Math.round(ingMes * 100) / 100, egMes: Math.round(egMes * 100) / 100, restante: Math.round((saldoInicial + ingMes - egMes) * 100) / 100 };
+      const saldoInicial = 0;
+      return { met, saldoInicial, ingMes: Math.round(ingMes * 100) / 100, egMes: Math.round(egMes * 100) / 100, restante: Math.round((ingMes - egMes) * 100) / 100 };
     });
-  }, [movsMes, movimientos, mesFiltro]);
+  }, [movsMes]);
 
   const totLiquidez = liquidezDetalle.reduce((acc, l) => ({
     ini: acc.ini + l.saldoInicial, ing: acc.ing + l.ingMes, eg: acc.eg + l.egMes, rest: acc.rest + l.restante
@@ -2358,27 +2357,24 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
         );
       })()}
 
-      {/* Liquidez Inmediata */}
       <div style={seccionStyle}>
         <p style={tituloStyle}>Liquidez Inmediata</p>
         <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 1fr", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
-            {["Método", "Inicial", "Ingreso", "Egreso", "Restante"].map((h, i) => (
+          <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+            {["Método", "Ingreso", "Egreso", "Restante"].map((h, i) => (
               <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
             ))}
           </div>
           {liquidezDetalle.map((l) => (
-            <div key={l.met} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 1fr", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
+            <div key={l.met} style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700 }}>{l.met}</span>
-              <span style={{ fontSize: 11, textAlign: "right", color: "#555" }}>{fmt(l.saldoInicial)}</span>
               <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{l.ingMes > 0 ? fmt(l.ingMes) : "—"}</span>
               <span style={{ fontSize: 11, textAlign: "right", color: SHEET.rosaBorde }}>{l.egMes > 0 ? fmt(l.egMes) : "—"}</span>
               <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: l.restante < 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(l.restante)}</span>
             </div>
           ))}
-          <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr 1fr", padding: "5px 8px", background: SHEET.gris, gap: 4, borderTop: "1px solid " + SHEET.grisBorde }}>
+          <div style={{ display: "grid", gridTemplateColumns: "80px 1fr 1fr 1fr", padding: "5px 8px", background: SHEET.gris, gap: 4, borderTop: "1px solid " + SHEET.grisBorde }}>
             <span style={{ fontSize: 11, fontWeight: 700 }}>Total</span>
-            <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700 }}>{fmt(totLiquidez.ini)}</span>
             <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.verdeBorde }}>{fmt(totLiquidez.ing)}</span>
             <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(totLiquidez.eg)}</span>
             <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: totLiquidez.rest < 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(totLiquidez.rest)}</span>
@@ -2482,21 +2478,22 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
               ))}
             </div>
             {tarjetas.map((t) => {
-              const { inicioCiclo, finCiclo, fechaPago } = fechasCicloTDC(t);
-              const gasto = Math.round(gastoCicloTDC(t.nombre, inicioCiclo, finCiclo) * 100) / 100;
-              const pagado = Math.round(pagadoCicloTDC(t.nombre, finCiclo, fechaPago) * 100) / 100;
-              const restante = Math.max(0, gasto - pagado);
+              const deudaReal = deudaRealTarjeta(t.nombre);
               const difPend = Math.round(difPendienteTDC(t.nombre) * 100) / 100;
-              const disponible = Math.max(0, (t.limite || 0) - difPend - restante);
+              const disponible = Math.max(0, (t.limite || 0) - difPend - deudaReal);
+              // Para mostrar "gasto ciclo actual" usamos el ciclo normal
+              const { inicioCiclo, finCiclo, fechaPago } = fechasCicloTDC(t);
+              const gastoCicloActual = Math.round(gastoCicloTDC(t.nombre, inicioCiclo, finCiclo) * 100) / 100;
+              const pagadoCicloActual = Math.round(pagadoCicloTDC(t.nombre, finCiclo, fechaPago) * 100) / 100;
               return (
                 <div key={t.nombre} style={{ display: "grid", gridTemplateColumns: "1fr 68px 68px 72px 78px", padding: "8px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3, alignItems: "center" }}>
                   <div>
                     <span style={{ fontSize: 12, fontWeight: 700 }}>{t.nombre}</span>
                     <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{inicioCiclo ? inicioCiclo.slice(5) : "—"} → {finCiclo ? finCiclo.slice(5) : "—"}</p>
                   </div>
-                  <span style={{ fontSize: 11, textAlign: "right" }}>{fmt(gasto)}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{fmt(pagado)}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : "$0.00"}</span>
+                  <span style={{ fontSize: 11, textAlign: "right" }}>{gastoCicloActual > 0 ? fmt(gastoCicloActual) : "—"}</span>
+                  <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{pagadoCicloActual > 0 ? fmt(pagadoCicloActual) : "—"}</span>
+                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: deudaReal > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{deudaReal > 0 ? fmt(deudaReal) : "$0.00"}</span>
                   <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: disponible <= 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(disponible)}</span>
                 </div>
               );
