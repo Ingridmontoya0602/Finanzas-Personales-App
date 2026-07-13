@@ -436,7 +436,10 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
   const [ajusteTDC, setAjusteTDC] = useState({});
   const [fijosRegistrados, setFijosRegistrados] = useState(false);
 
-  const cuentasDisponibles = catalog.cuentas[metodo] || [];
+  // Para Pago TDC: la "cuenta" destino es la tarjeta TDC a abonar
+  const cuentasDisponibles = tipo === "Pago TDC"
+    ? (catalog.cuentas.TDC || [])
+    : (catalog.cuentas[metodo] || []);
   const categoriasDisponibles = catalog.categorias[tipo] || [];
   // Para Membresías/Servicios/Seguros, las opciones salen directo del catálogo maestro
   // (mismo array que usa el autocompletado), así nunca se desincronizan.
@@ -448,6 +451,10 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
 
   useEffect(() => { setCuenta(""); }, [metodo]);
   useEffect(() => { setCategoria(""); }, [tipo]);
+  useEffect(() => {
+    // Cuando elige Pago TDC, pre-selecciona TDD como origen (lo más común)
+    if (tipo === "Pago TDC" && !metodo) setMetodo("TDD");
+  }, [tipo]);
   useEffect(() => { setSubcategoria(""); }, [categoria]);
   useEffect(() => { setIngresoSub(""); }, [ingresoTipo]);
   useEffect(() => { setIngresoPersonaTercero(""); }, [ingresoSub]);
@@ -979,11 +986,12 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
               {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
-          <Field label="Cuenta" error={errors.cuenta}>
+          <Field label={tipo === "Pago TDC" ? "Tarjeta a abonar" : "Cuenta"} error={errors.cuenta}>
             <select value={cuenta} onChange={(e) => { setCuenta(e.target.value); setErrors((p) => ({ ...p, cuenta: false })); }} style={selStyle(errors.cuenta)} disabled={!metodo}>
-              <option value="">{metodo ? "Selecciona..." : "Primero elige Origen"}</option>
+              <option value="">{metodo ? (tipo === "Pago TDC" ? "¿A cuál tarjeta?" : "Selecciona...") : "Primero elige Origen"}</option>
               {cuentasDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+            {tipo === "Pago TDC" && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Elige la tarjeta de crédito a la que abonaste.</p>}
           </Field>
 
           {/* Diferido TDC toggle */}
@@ -1122,9 +1130,21 @@ function ResumenTab({ movimientos, catalog }) {
   const [mesAbierto, setMesAbierto] = useState(null);
 
   // --- Flujo total acumulado hasta hoy ---
+  // "Disponible real" = solo Efectivo + TDD (lo que tienes en cash/débito ahora mismo)
+  // TDC se muestra aparte como deuda pendiente
   const totalIngresosHist = movimientos.filter((m) => m.mov === "Ingreso").reduce((s, m) => s + Number(m.cantidad), 0);
   const totalEgresosHist = movimientos.filter((m) => m.mov === "Egreso").reduce((s, m) => s + Number(m.cantidad), 0);
   const balanceTotal = totalIngresosHist - totalEgresosHist;
+
+  // Disponible real = ingresos - egresos excluyendo TDC (solo flujo de efectivo/débito)
+  const ingresosLiquidoHist = movimientos.filter((m) => m.mov === "Ingreso" && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0);
+  const egresosLiquidoHist = movimientos.filter((m) => m.mov === "Egreso" && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0);
+  const balanceLiquido = ingresosLiquidoHist - egresosLiquidoHist;
+
+  // Deuda TDC total acumulada (gastos TDC - pagos TDC)
+  const gastosTDCHist = movimientos.filter((m) => m.mov === "Egreso" && m.metodo === "TDC" && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0);
+  const pagosTDCHist = movimientos.filter((m) => m.mov === "Egreso" && m.tipo === "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0);
+  const deudaTDCHist = Math.max(0, gastosTDCHist - pagosTDCHist);
 
   // Desglose ingresos por tipo (histórico)
   const ingresosPorTipo = useMemo(() => {
@@ -1183,10 +1203,16 @@ function ResumenTab({ movimientos, catalog }) {
             <p style={{ fontSize: 22, fontWeight: 700, margin: 0, color: SHEET.rosaBorde }}>{fmtShort(totalEgresosHist)}</p>
           </div>
         </div>
-        <div style={{ padding: "12px 14px", background: balanceTotal >= 0 ? SHEET.verde : SHEET.rosa, borderTop: "1px solid " + SHEET.grisBorde, textAlign: "center" }}>
-          <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 2px", color: balanceTotal >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>Saldo disponible acumulado</p>
-          <p style={{ fontSize: 26, fontWeight: 700, margin: 0, color: balanceTotal >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(balanceTotal)}</p>
+        <div style={{ padding: "12px 14px", background: balanceLiquido >= 0 ? SHEET.verde : SHEET.rosa, borderTop: "1px solid " + SHEET.grisBorde, textAlign: "center" }}>
+          <p style={{ fontSize: 11, fontWeight: 700, margin: "0 0 2px", color: balanceLiquido >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>Disponible en efectivo / débito</p>
+          <p style={{ fontSize: 26, fontWeight: 700, margin: 0, color: balanceLiquido >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(balanceLiquido)}</p>
         </div>
+        {deudaTDCHist > 0 && (
+          <div style={{ padding: "8px 14px", background: "#fff7f7", borderTop: "1px solid " + SHEET.grisBorde, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "#888" }}>⚠ Deuda TDC pendiente (no incluida arriba)</span>
+            <b style={{ fontSize: 12, color: SHEET.rosaBorde }}>{fmt(deudaTDCHist)}</b>
+          </div>
+        )}
       </div>
 
       {/* Desglose ingresos histórico */}
@@ -2080,12 +2106,16 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
   const pagadoInversionMes = movsMes.filter(m => m.mov === "Egreso" && m.tipo === "Inversión").reduce((s, m) => s + Number(m.cantidad), 0);
   const pagadoFamiliaMes = movsMes.filter(m => m.mov === "Egreso" && (m.tipo === "Familia (Aportación)" || m.categoria === "Familia")).reduce((s, m) => s + Number(m.cantidad), 0);
   const pagadoFijosMes = movsMes.filter(m => m.mov === "Egreso" && m.tipo === "G. Fijo").reduce((s, m) => s + Number(m.cantidad), 0);
+  // Pagos a TDC realizados este mes (abonos a tarjeta)
+  const pagadoTDCMes = movsMes.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0);
 
   const restantePrestaMes = Math.max(0, aportacionPrestamos - pagadoPrestaMes);
   const restanteAhorroMes = Math.max(0, aportacionAhorro - pagadoAhorroMes);
   const restanteInversionMes = Math.max(0, aportacionInversion - pagadoInversionMes);
   const restanteFamiliaMes = Math.max(0, aportacionFamilia - pagadoFamiliaMes);
   const restanteFijosMes = Math.max(0, flujoMinimo - pagadoFijosMes);
+  // Deuda TDC restante = total deuda real - lo que ya abonaste este mes
+  const restanteTDCMes = Math.max(0, deudaTDCMes - pagadoTDCMes);
 
   // Promedio histórico mensual de pago TDC
   const promedioTDCMensual = useMemo(() => {
@@ -2393,7 +2423,7 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
           </div>
           {[
             { label: "Flujo Mínimo", prom: totalFijos, mes: flujoMinimo, rest: restanteFijosMes },
-            { label: "Deuda TDC", prom: promedioTDCMensual, mes: deudaTDCMes, rest: deudaTDCMes },
+            { label: "Deuda TDC", prom: promedioTDCMensual, mes: deudaTDCMes, rest: restanteTDCMes },
             { label: "Familia", prom: aportacionFamilia, mes: aportacionFamilia, rest: restanteFamiliaMes },
             { label: "Préstamos", prom: aportacionPrestamos, mes: aportacionPrestamos, rest: restantePrestaMes },
             { label: "Ahorro", prom: aportacionAhorro, mes: aportacionAhorro, rest: restanteAhorroMes },
@@ -2410,7 +2440,7 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
             <span style={{ fontSize: 11, fontWeight: 700 }}>Total</span>
             <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: "#aaa" }}>{fmt(totalFijos + promedioTDCMensual + aportacionFamilia + aportacionPrestamos + aportacionAhorro + aportacionInversion)}</span>
             <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700 }}>{fmt(flujoMinimo + deudaTDCMes + aportacionFamilia + aportacionPrestamos + aportacionAhorro + aportacionInversion)}</span>
-            <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(restanteFijosMes + deudaTDCMes + restanteFamiliaMes + restantePrestaMes + restanteAhorroMes + restanteInversionMes)}</span>
+            <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(restanteFijosMes + restanteTDCMes + restanteFamiliaMes + restantePrestaMes + restanteAhorroMes + restanteInversionMes)}</span>
           </div>
         </div>
       </div>
