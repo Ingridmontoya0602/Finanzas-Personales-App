@@ -436,11 +436,12 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
   const [ajusteTDC, setAjusteTDC] = useState({});
   const [fijosRegistrados, setFijosRegistrados] = useState(false);
 
-  // Para Pago TDC: la "cuenta" destino es la tarjeta TDC a abonar
-  const cuentasDisponibles = tipo === "Pago TDC"
+  // Para Pago TDC: la categoría es la tarjeta TDC a la que abonaste (se llena automático de las registradas)
+  // El origen/cuenta es de donde sale el dinero (TDD, Efectivo, etc.) — igual que cualquier egreso
+  const cuentasDisponibles = catalog.cuentas[metodo] || [];
+  const categoriasDisponibles = tipo === "Pago TDC"
     ? (catalog.cuentas.TDC || [])
-    : (catalog.cuentas[metodo] || []);
-  const categoriasDisponibles = catalog.categorias[tipo] || [];
+    : (catalog.categorias[tipo] || []);
   // Para Membresías/Servicios/Seguros, las opciones salen directo del catálogo maestro
   // (mismo array que usa el autocompletado), así nunca se desincronizan.
   const subcatsDisponibles = categoria === "Membresías" ? (catalog.membresias || []).filter(m => m.activa).map(m => m.nombre)
@@ -902,7 +903,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                   {catalog.tipos.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </Field>
-              <Field label="Categoría" error={errors.categoria}>
+              <Field label={tipo === "Pago TDC" ? "Tarjeta TDC abonada" : "Categoría"} error={errors.categoria}>
                 <select value={categoria} onChange={(e) => {
                   const v = e.target.value;
                   setCategoria(v);
@@ -915,9 +916,10 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                     if (inv) { setCantidad(String(inv.aportacion)); if (inv.metodo) setMetodo(inv.metodo); if (inv.cuenta) setCuenta(inv.cuenta); }
                   }
                 }} style={selStyle(errors.categoria)} disabled={!tipo}>
-                  <option value="">{tipo ? "Selecciona..." : "Primero elige Tipo"}</option>
+                  <option value="">{tipo ? (tipo === "Pago TDC" ? "¿A cuál tarjeta abonaste?" : "Selecciona...") : "Primero elige Tipo"}</option>
                   {categoriasDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
+                {tipo === "Pago TDC" && categoria && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>El abono se registrará a {categoria}. Elige abajo de dónde salió el dinero.</p>}
               </Field>
               {/* Subcategoría para G.Fijo (membresías/servicios/seguros) */}
               {tipo === "G. Fijo" && categoria && (
@@ -986,12 +988,11 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
               {catalog.metodos.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
-          <Field label={tipo === "Pago TDC" ? "Tarjeta a abonar" : "Cuenta"} error={errors.cuenta}>
+          <Field label="Cuenta" error={errors.cuenta}>
             <select value={cuenta} onChange={(e) => { setCuenta(e.target.value); setErrors((p) => ({ ...p, cuenta: false })); }} style={selStyle(errors.cuenta)} disabled={!metodo}>
-              <option value="">{metodo ? (tipo === "Pago TDC" ? "¿A cuál tarjeta?" : "Selecciona...") : "Primero elige Origen"}</option>
+              <option value="">{metodo ? "Selecciona..." : "Primero elige Origen"}</option>
               {cuentasDisponibles.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            {tipo === "Pago TDC" && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Elige la tarjeta de crédito a la que abonaste.</p>}
           </Field>
 
           {/* Diferido TDC toggle */}
@@ -2035,7 +2036,9 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
     const d = new Date(fin); d.setDate(d.getDate() + 1);
     const desde = d.toISOString().slice(0, 10);
     const hasta = fechaPago || "9999-12-31";
-    return movimientos.filter((m) => m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === nombre && m.fecha >= desde && m.fecha <= hasta).reduce((s, m) => s + Number(m.cantidad), 0);
+    return movimientos.filter((m) => m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+      (m.cuenta === nombre || m.categoria === nombre) &&
+      m.fecha >= desde && m.fecha <= hasta).reduce((s, m) => s + Number(m.cantidad), 0);
   }
 
   function difPendienteTDC(nombre) {
@@ -2083,9 +2086,14 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
   // Deuda TDC: para cada tarjeta, todos los egresos TDC de esa cuenta
   // que no han sido cubiertos por un Pago TDC. Esto incluye ajustes de cortes anteriores
   // que pueden tener fechas fuera del ciclo del mes actual.
+  // Pagos TDC: compatibilidad hacia atrás (cuenta=tarjeta) y nuevo flujo (categoria=tarjeta)
+  function esPagoParaTarjeta(m, tarjetaNombre) {
+    return m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+      (m.cuenta === tarjetaNombre || m.categoria === tarjetaNombre);
+  }
   function deudaRealTarjeta(tarjetaNombre) {
     const totalGasto = movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDC" && m.cuenta === tarjetaNombre && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0);
-    const totalPagado = movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === tarjetaNombre).reduce((s, m) => s + Number(m.cantidad), 0);
+    const totalPagado = movimientos.filter(m => esPagoParaTarjeta(m, tarjetaNombre)).reduce((s, m) => s + Number(m.cantidad), 0);
     return Math.max(0, Math.round((totalGasto - totalPagado) * 100) / 100);
   }
 
@@ -3297,7 +3305,8 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
   function calcularAdelanto(tarjetaNombre, inicioCiclo, finCiclo) {
     if (!inicioCiclo || !finCiclo) return 0;
     return r2(movimientos.filter((m) =>
-      m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === tarjetaNombre &&
+      m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+      (m.cuenta === tarjetaNombre || m.categoria === tarjetaNombre) &&
       m.fecha >= inicioCiclo && m.fecha <= finCiclo
     ).reduce((s, m) => s + Number(m.cantidad), 0));
   }
@@ -3308,7 +3317,8 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
     const desde = d.toISOString().slice(0, 10);
     const hasta = fechaPago || "9999-12-31";
     return r2(movimientos.filter((m) =>
-      m.mov === "Egreso" && m.tipo === "Pago TDC" && m.cuenta === tarjetaNombre &&
+      m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+      (m.cuenta === tarjetaNombre || m.categoria === tarjetaNombre) &&
       m.fecha >= desde && m.fecha <= hasta
     ).reduce((s, m) => s + Number(m.cantidad), 0));
   }
