@@ -2563,15 +2563,20 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
               const disponible = r2(Math.max(0, (t.limite || 0) - difPend - restante));
 
               return (
-                <div key={t.nombre} style={{ display: "grid", gridTemplateColumns: "1fr 68px 68px 72px 78px", padding: "8px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3, alignItems: "center" }}>
-                  <div>
-                    <span style={{ fontSize: 12, fontWeight: 700 }}>{t.nombre}</span>
-                    <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{inicioCiclo ? inicioCiclo.slice(5) : "—"} → {finCiclo ? finCiclo.slice(5) : "—"}</p>
+                <div key={t.nombre} style={{ borderBottom: "1px solid " + SHEET.grisBorde }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 68px 68px 72px 78px", padding: "8px 8px", gap: 3, alignItems: "center" }}>
+                    <div>
+                      <span style={{ fontSize: 12, fontWeight: 700 }}>{t.nombre}</span>
+                      <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{inicioCiclo} → {finCiclo} | hoy:{hoyStr} | corte:{corteYaPaso?"sí":"no"}</p>
+                    </div>
+                    <span style={{ fontSize: 11, textAlign: "right" }}>{gastoDisplay > 0 ? fmt(gastoDisplay) : "—"}</span>
+                    <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{pagadoDisplay > 0 ? fmt(pagadoDisplay) : "—"}</span>
+                    <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : "$0.00"}</span>
+                    <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: disponible <= 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(disponible)}</span>
                   </div>
-                  <span style={{ fontSize: 11, textAlign: "right" }}>{gastoDisplay > 0 ? fmt(gastoDisplay) : "—"}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{pagadoDisplay > 0 ? fmt(pagadoDisplay) : "—"}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : "$0.00"}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: disponible <= 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(disponible)}</span>
+                  <p style={{ fontSize: 9, color: "#999", margin: "0 8px 6px", fontFamily: "monospace" }}>
+                    cargosCorte:{cargosCorte} pagadoPost:{pagadoPostCorte} cargosAct:{cargosActual} cargosEnCurso:{cargosEnCurso} adelantos:{adelantosCiclo}
+                  </p>
                 </div>
               );
             })}
@@ -3675,7 +3680,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                   <span style={{ color: "#888", fontWeight: 400 }}> · Corta el {fmtDate(finCiclo)}</span>
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11.5 }}>
-                  <div><span style={{ color: "#777", fontSize: 10 }}>Cargos a la fecha</span><br /><b>{fmt(cargosEnCurso)}</b></div>
+                  <div><span style={{ color: "#777", fontSize: 10 }}>Cargos a la fecha</span><br /><b>{fmt(Math.max(0, cargosEnCurso - adelantosCicloAbierto))}</b></div>
                   <div><span style={{ color: "#777", fontSize: 10 }}>Disponible</span><br /><b style={{ color: disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(disponible)}</b></div>
                 </div>
               </div>
