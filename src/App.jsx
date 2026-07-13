@@ -1929,6 +1929,7 @@ function PagosFuturosTab({ catalog, movimientos }) {
 }
 
 function EstadoMesTab({ catalog, movimientos, userEmail }) {
+  const r2 = (n) => Math.round(n * 100) / 100;
   const today = todayISO().slice(0, 7);
   const mesesDisponibles = useMemo(() => {
     const set = new Set(movimientos.map((m) => m.fecha.slice(0, 7)));
@@ -2516,23 +2517,60 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
               ))}
             </div>
             {tarjetas.map((t) => {
-              const deudaReal = deudaRealTarjeta(t.nombre);
+              const { inicioCiclo, finCiclo, fechaPago } = fechasCicloTDC(t);
+              const hoyStr = todayISO();
+              const corteYaPaso = finCiclo && finCiclo <= hoyStr;
               const difPend = Math.round(difPendienteTDC(t.nombre) * 100) / 100;
-              const disponible = Math.max(0, (t.limite || 0) - difPend - deudaReal);
-              const { inicioCiclo, finCiclo } = fechasCicloTDC(t);
-              // Gasto = todos los cargos TDC de esta tarjeta en el historial completo
-              const gastoTotal = Math.round(movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDC" && m.cuenta === t.nombre && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0) * 100) / 100;
-              // Pagado = todos los pagos a esta tarjeta (adelantos + post-corte, flujo viejo y nuevo)
-              const pagadoTotal = Math.round(movimientos.filter(m => esPagoParaTarjeta(m, t.nombre)).reduce((s, m) => s + Number(m.cantidad), 0) * 100) / 100;
+
+              // Cargos del ciclo anterior (si ya cerró)
+              const cargosCorte = r2(movimientos.filter(m =>
+                m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
+                m.fecha >= inicioCiclo && m.fecha <= finCiclo
+              ).reduce((s, m) => s + Number(m.cantidad), 0));
+
+              // Pagos post-corte (si el corte ya pasó)
+              const pagadoPostCorte = corteYaPaso ? r2(movimientos.filter(m =>
+                m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+                (m.cuenta === t.nombre || m.categoria === t.nombre) &&
+                (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() <= m.fecha
+              ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+
+              // Cargos ciclo actual (si el corte ya pasó)
+              const inicioCicloActual = finCiclo ? (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : null;
+              const cargosActual = (corteYaPaso && inicioCicloActual) ? r2(movimientos.filter(m =>
+                m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
+                m.fecha >= inicioCicloActual && m.fecha <= hoyStr
+              ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+
+              // Cargos ciclo abierto + adelantos (si el corte NO ha pasado)
+              const cargosEnCurso = !corteYaPaso ? r2(movimientos.filter(m =>
+                m.mov === "Egreso" && m.cuenta === t.nombre &&
+                (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste")) &&
+                m.fecha >= inicioCiclo && m.fecha <= hoyStr
+              ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+              const adelantosCiclo = !corteYaPaso ? r2(movimientos.filter(m =>
+                m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+                (m.cuenta === t.nombre || m.categoria === t.nombre) &&
+                m.fecha >= inicioCiclo && m.fecha <= hoyStr
+              ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+
+              // Gasto y pagado a mostrar
+              const gastoDisplay = corteYaPaso ? (cargosCorte + cargosActual) : cargosEnCurso;
+              const pagadoDisplay = corteYaPaso ? pagadoPostCorte : adelantosCiclo;
+              const restante = corteYaPaso
+                ? r2(Math.max(0, cargosCorte - pagadoPostCorte) + cargosActual)
+                : r2(Math.max(0, cargosEnCurso - adelantosCiclo));
+              const disponible = r2(Math.max(0, (t.limite || 0) - difPend - restante));
+
               return (
                 <div key={t.nombre} style={{ display: "grid", gridTemplateColumns: "1fr 68px 68px 72px 78px", padding: "8px 8px", borderBottom: "1px solid " + SHEET.grisBorde, gap: 3, alignItems: "center" }}>
                   <div>
                     <span style={{ fontSize: 12, fontWeight: 700 }}>{t.nombre}</span>
                     <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{inicioCiclo ? inicioCiclo.slice(5) : "—"} → {finCiclo ? finCiclo.slice(5) : "—"}</p>
                   </div>
-                  <span style={{ fontSize: 11, textAlign: "right" }}>{gastoTotal > 0 ? fmt(gastoTotal) : "—"}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{pagadoTotal > 0 ? fmt(pagadoTotal) : "—"}</span>
-                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: deudaReal > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{deudaReal > 0 ? fmt(deudaReal) : "$0.00"}</span>
+                  <span style={{ fontSize: 11, textAlign: "right" }}>{gastoDisplay > 0 ? fmt(gastoDisplay) : "—"}</span>
+                  <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{pagadoDisplay > 0 ? fmt(pagadoDisplay) : "—"}</span>
+                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : "$0.00"}</span>
                   <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: disponible <= 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(disponible)}</span>
                 </div>
               );
