@@ -2103,29 +2103,8 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
 
   // --- Alerta Flujo de Efectivo ---
   const flujoMinimo = totalFijos;
-  // Deuda TDC del mes = lo que realmente debes pagar este ciclo por tarjeta
-  // = cargos del ciclo - lo ya pagado (adelantos + pagos post-corte)
-  const deudaTDCMes = Math.round(tarjetas.reduce((s, t) => {
-    const hoyStr = todayISO();
-    const { inicioCiclo, finCiclo, fechaPago } = fechasCicloTDC(t);
-    const corteYaPaso = finCiclo && finCiclo <= hoyStr;
-    // Cargos del ciclo relevante (corte anterior si ya pasó, ciclo en curso si no)
-    const cargos = movimientos.filter(m =>
-      m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
-      m.fecha >= inicioCiclo && m.fecha <= finCiclo
-    ).reduce((a, m) => a + Number(m.cantidad), 0);
-    // Más cargos del ciclo actual si el corte ya pasó
-    const inicioCicloActual = finCiclo ? (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : null;
-    const cargosActual = (corteYaPaso && inicioCicloActual) ? movimientos.filter(m =>
-      m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
-      m.fecha >= inicioCicloActual && m.fecha <= hoyStr
-    ).reduce((a, m) => a + Number(m.cantidad), 0) : 0;
-    // Pagos ya realizados (adelantos + post-corte)
-    const pagados = movimientos.filter(m => esPagoParaTarjeta(m, t.nombre) &&
-      m.fecha >= inicioCiclo && m.fecha <= hoyStr
-    ).reduce((a, m) => a + Number(m.cantidad), 0);
-    return s + Math.max(0, cargos + cargosActual - pagados);
-  }, 0) * 100) / 100;
+  // Deuda TDC = saldo pendiente real por tarjeta (gastos históricos - pagos históricos)
+  const deudaTDCMes = Math.round(tarjetas.reduce((s, t) => s + deudaRealTarjeta(t.nombre), 0) * 100) / 100;
   const aportacionPrestamos = (catalog.prestamosBancarios || []).filter(p => p.activa).reduce((s, p) => s + aportacionMensual(p.pagoPeriodo || 0, p.frecuencia), 0);
   const aportacionAhorro = (catalog.ahorros || []).filter(a => a.activa).reduce((s, a) => s + aportacionMensual(a.aportacion || 0, a.frecuencia), 0);
   const aportacionInversion = (catalog.inversiones || []).filter(i => i.activa).reduce((s, i) => s + aportacionMensual(i.aportacion || 0, i.frecuencia), 0);
@@ -3603,7 +3582,7 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                     Disponible: <span style={{ color: disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde, fontSize: 15 }}>{fmt(disponible)}</span>
                   </p>
                   <p style={{ fontSize: 10, color: "#666", margin: "2px 0 0" }}>
-                    {fmt(t.limite)} − {fmt(totalDifPendiente)} difs − {fmt(pendienteCorteAnt)} corte ant − {fmt(cargosActual)} ciclo actual
+                    {fmt(t.limite)} − {fmt(totalDifPendiente)} difs − {fmt(pendienteCorteAnt)} corte ant − {fmt(corteYaPaso ? cargosActual : Math.max(0, cargosEnCurso - adelantosCicloAbierto))} {corteYaPaso ? "ciclo actual" : "neto ciclo"}
                   </p>
                 </div>
                 {difActivos.length > 0 && (
