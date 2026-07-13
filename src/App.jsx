@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "./supabaseClient";
 
 const SHEET = {
@@ -2003,8 +2003,10 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
     const metodos = ["Efectivo", "TDD", "TDC"];
     return metodos.map((met) => {
       const ingresos = movsMes.filter((m) => m.mov === "Ingreso" && m.metodo === met).reduce((s, m) => s + Number(m.cantidad), 0);
-      const egresos = movsMes.filter((m) => m.mov === "Egreso" && m.metodo === met).reduce((s, m) => s + Number(m.cantidad), 0);
-      return { met, ingresos, egresos, restante: ingresos - egresos };
+      // Para TDD: excluir Pago TDC (son abonos a tarjeta, se muestran aparte)
+      const egresos = movsMes.filter((m) => m.mov === "Egreso" && m.metodo === met && !(met === "TDD" && m.tipo === "Pago TDC")).reduce((s, m) => s + Number(m.cantidad), 0);
+      const pagoTDC = met === "TDD" ? movsMes.filter((m) => m.mov === "Egreso" && m.metodo === "TDD" && m.tipo === "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0) : 0;
+      return { met, ingresos, egresos, pagoTDC, restante: ingresos - egresos - pagoTDC };
     });
   }, [movsMes]);
 
@@ -2582,23 +2584,33 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
         <p style={tituloStyle}>Gastos Fijos del Mes</p>
         {gastosFijosEstatus.length === 0 ? <p style={{ fontSize: 12, color: "#888", fontStyle: "italic" }}>Sin gastos fijos este mes.</p> : (
           <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 65px 80px 50px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
-              {["Concepto", "Costo", "Frec.", "Gastado", "Est."].map((h, i) => (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 55px 70px 75px", background: SHEET.gris, padding: "4px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+              {["Concepto", "Costo", "Frec.", "Gastado", "Restante"].map((h, i) => (
                 <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#555", textAlign: i === 0 ? "left" : "right" }}>{h}</span>
               ))}
             </div>
-            {gastosFijosEstatus.map((g, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 80px 65px 80px 50px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, background: i % 2 === 0 ? "#fff" : SHEET.gris, alignItems: "center" }}>
-                <div>
-                  <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>{g.nombre}</p>
-                  <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{g.categoria}</p>
+            {gastosFijosEstatus.map((g, i) => {
+              const restante = Math.max(0, g.costo - g.gastado);
+              return (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 70px 55px 70px 75px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde, background: i % 2 === 0 ? "#fff" : SHEET.gris, alignItems: "center" }}>
+                  <div>
+                    <p style={{ fontSize: 12, fontWeight: 700, margin: 0 }}>{g.nombre}</p>
+                    <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{g.categoria}</p>
+                  </div>
+                  <span style={{ fontSize: 11, textAlign: "right" }}>{fmt(g.costo)}</span>
+                  <span style={{ fontSize: 10, textAlign: "right", color: "#777" }}>{g.frecuencia}</span>
+                  <span style={{ fontSize: 11, textAlign: "right", color: g.gastado > 0 ? "#333" : "#ccc" }}>{g.gastado > 0 ? fmt(g.gastado) : "—"}</span>
+                  <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: restante > 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{restante > 0 ? fmt(restante) : "✓"}</span>
                 </div>
-                <span style={{ fontSize: 11, textAlign: "right" }}>{fmt(g.costo)}</span>
-                <span style={{ fontSize: 10, textAlign: "right", color: "#777" }}>{g.frecuencia}</span>
-                <span style={{ fontSize: 11, textAlign: "right", color: g.gastado > 0 ? "#333" : "#ccc" }}>{g.gastado > 0 ? fmt(g.gastado) : "—"}</span>
-                <span style={{ fontSize: 13, textAlign: "right", fontWeight: 700, color: g.pagado ? SHEET.verdeBorde : SHEET.rosaBorde }}>{g.pagado ? "✓" : "⏳"}</span>
-              </div>
-            ))}
+              );
+            })}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 55px 70px 75px", padding: "5px 8px", background: SHEET.gris, borderTop: "1px solid " + SHEET.grisBorde }}>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>Total</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700 }}>{fmt(gastosFijosEstatus.reduce((s, g) => s + g.costo, 0))}</span>
+              <span></span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700 }}>{fmt(gastosFijosEstatus.reduce((s, g) => s + g.gastado, 0))}</span>
+              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: SHEET.rosaBorde }}>{fmt(gastosFijosEstatus.reduce((s, g) => s + Math.max(0, g.costo - g.gastado), 0))}</span>
+            </div>
           </div>
         )}
       </div>
@@ -2684,12 +2696,22 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
             ))}
           </div>
           {liquidezPorMetodo.map((l) => (
-            <div key={l.met} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 80px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>{l.met}</span>
-              <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{l.ingresos > 0 ? fmt(l.ingresos) : "—"}</span>
-              <span style={{ fontSize: 11, textAlign: "right", color: SHEET.rosaBorde }}>{l.egresos > 0 ? fmt(l.egresos) : "—"}</span>
-              <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: l.restante < 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(l.restante)}</span>
-            </div>
+            <React.Fragment key={l.met}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 80px", padding: "5px 8px", borderBottom: "1px solid " + SHEET.grisBorde }}>
+                <span style={{ fontSize: 11, fontWeight: 700 }}>{l.met}</span>
+                <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{l.ingresos > 0 ? fmt(l.ingresos) : "—"}</span>
+                <span style={{ fontSize: 11, textAlign: "right", color: SHEET.rosaBorde }}>{l.egresos > 0 ? fmt(l.egresos) : "—"}</span>
+                <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: l.restante < 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(l.restante)}</span>
+              </div>
+              {l.pagoTDC > 0 && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 80px", padding: "3px 8px 3px 18px", borderBottom: "1px solid " + SHEET.grisBorde, background: "#fafafa" }}>
+                  <span style={{ fontSize: 10, color: "#888", fontStyle: "italic" }}>↳ Pago TDC</span>
+                  <span></span>
+                  <span style={{ fontSize: 10, textAlign: "right", color: SHEET.rosaBorde }}>{fmt(l.pagoTDC)}</span>
+                  <span></span>
+                </div>
+              )}
+            </React.Fragment>
           ))}
         </div>
       </div>
@@ -3527,8 +3549,15 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
           (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste"))
         ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
-        // Disponible = Límite - Diferidos - Pendiente corte ant - Cargos ciclo actual (o en curso)
-        const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - pendienteCorteAnt - cargosActual - cargosEnCurso));
+        // Adelantos dentro del ciclo en curso (pagos TDC hechos antes del corte)
+        const adelantosCicloAbierto = !corteYaPaso ? r2(movimientos.filter(m =>
+          m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+          (m.cuenta === t.nombre || m.categoria === t.nombre) &&
+          m.fecha >= inicioCiclo && m.fecha <= hoyStr
+        ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+
+        // Disponible = Límite - Diferidos - Pendiente corte ant - Cargos ciclo actual (o en curso) + Adelantos del ciclo abierto
+        const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - pendienteCorteAnt - cargosActual - Math.max(0, cargosEnCurso - adelantosCicloAbierto)));
 
         return (
           <div key={t.nombre} style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, marginBottom: 14, overflow: "hidden" }}>
