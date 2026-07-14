@@ -2552,7 +2552,8 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
               const adelantosCiclo = !corteYaPaso ? r2(movimientos.filter(m =>
                 m.mov === "Egreso" && m.tipo === "Pago TDC" &&
                 (m.cuenta === t.nombre || m.categoria === t.nombre) &&
-                m.fecha >= inicioCiclo && m.fecha <= hoyStr
+                m.fecha >= inicioCiclo && m.fecha <= hoyStr &&
+                m.metodo !== "TDC"
               ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
               const gastoDisplay = corteYaPaso ? (cargosCorte + cargosActual) : cargosEnCurso;
@@ -3371,7 +3372,8 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
     return r2(movimientos.filter((m) =>
       m.mov === "Egreso" && m.tipo === "Pago TDC" &&
       (m.cuenta === tarjetaNombre || m.categoria === tarjetaNombre) &&
-      m.fecha >= inicioCiclo && m.fecha <= finCiclo
+      m.fecha >= inicioCiclo && m.fecha <= finCiclo &&
+      m.metodo !== "TDC"
     ).reduce((s, m) => s + Number(m.cantidad), 0));
   }
 
@@ -3383,7 +3385,8 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
     return r2(movimientos.filter((m) =>
       m.mov === "Egreso" && m.tipo === "Pago TDC" &&
       (m.cuenta === tarjetaNombre || m.categoria === tarjetaNombre) &&
-      m.fecha >= desde && m.fecha <= hasta
+      m.fecha >= desde && m.fecha <= hasta &&
+      m.metodo !== "TDC"
     ).reduce((s, m) => s + Number(m.cantidad), 0));
   }
 
@@ -3599,7 +3602,8 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
         const adelantosCicloAbierto = !corteYaPaso ? r2(movimientos.filter(m =>
           m.mov === "Egreso" && m.tipo === "Pago TDC" &&
           (m.cuenta === t.nombre || m.categoria === t.nombre) &&
-          m.fecha >= inicioCiclo && m.fecha <= hoyStr
+          m.fecha >= inicioCiclo && m.fecha <= hoyStr &&
+          m.metodo !== "TDC"
         ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
         // Disponible = Límite - Diferidos - Pendiente corte ant - Cargos ciclo actual (o en curso) + Adelantos del ciclo abierto
