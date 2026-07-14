@@ -2519,42 +2519,42 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
             {tarjetas.map((t) => {
               const { inicioCiclo, finCiclo, fechaPago } = fechasCicloTDC(t);
               const hoyStr = todayISO();
-              const corteYaPaso = finCiclo && finCiclo <= hoyStr;
+              const corteYaPaso = !!(finCiclo && finCiclo <= hoyStr);
               const difPend = Math.round(difPendienteTDC(t.nombre) * 100) / 100;
 
-              // Cargos del ciclo anterior (si ya cerró)
-              const cargosCorte = r2(movimientos.filter(m =>
+              // Cargos del ciclo que cerró (solo si el corte ya pasó)
+              const cargosCorte = corteYaPaso ? r2(movimientos.filter(m =>
                 m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
                 m.fecha >= inicioCiclo && m.fecha <= finCiclo
-              ).reduce((s, m) => s + Number(m.cantidad), 0));
+              ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
-              // Pagos post-corte (si el corte ya pasó)
-              const pagadoPostCorte = corteYaPaso ? r2(movimientos.filter(m =>
+              // Pagos post-corte (después del día siguiente al fin de ciclo)
+              const dSig = finCiclo ? (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : null;
+              const pagadoPostCorte = (corteYaPaso && dSig) ? r2(movimientos.filter(m =>
                 m.mov === "Egreso" && m.tipo === "Pago TDC" &&
                 (m.cuenta === t.nombre || m.categoria === t.nombre) &&
-                (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() <= m.fecha
+                m.fecha >= dSig
               ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
-              // Cargos ciclo actual (si el corte ya pasó)
-              const inicioCicloActual = finCiclo ? (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : null;
-              const cargosActual = (corteYaPaso && inicioCicloActual) ? r2(movimientos.filter(m =>
+              // Cargos ciclo actual (desde el día siguiente al corte hasta hoy)
+              const cargosActual = (corteYaPaso && dSig) ? r2(movimientos.filter(m =>
                 m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
-                m.fecha >= inicioCicloActual && m.fecha <= hoyStr
+                m.fecha >= dSig && m.fecha <= hoyStr
               ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
-              // Cargos ciclo abierto + adelantos (si el corte NO ha pasado)
+              // Cargos ciclo abierto y adelantos (solo si el corte NO ha pasado)
               const cargosEnCurso = !corteYaPaso ? r2(movimientos.filter(m =>
                 m.mov === "Egreso" && m.cuenta === t.nombre &&
                 (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste")) &&
                 m.fecha >= inicioCiclo && m.fecha <= hoyStr
               ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+
               const adelantosCiclo = !corteYaPaso ? r2(movimientos.filter(m =>
                 m.mov === "Egreso" && m.tipo === "Pago TDC" &&
                 (m.cuenta === t.nombre || m.categoria === t.nombre) &&
                 m.fecha >= inicioCiclo && m.fecha <= hoyStr
               ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
-              // Gasto y pagado a mostrar
               const gastoDisplay = corteYaPaso ? (cargosCorte + cargosActual) : cargosEnCurso;
               const pagadoDisplay = corteYaPaso ? pagadoPostCorte : adelantosCiclo;
               const restante = corteYaPaso
@@ -2567,7 +2567,7 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 68px 68px 72px 78px", padding: "8px 8px", gap: 3, alignItems: "center" }}>
                     <div>
                       <span style={{ fontSize: 12, fontWeight: 700 }}>{t.nombre}</span>
-                      <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{inicioCiclo} → {finCiclo} | hoy:{hoyStr} | corte:{corteYaPaso?"sí":"no"}</p>
+                      <p style={{ fontSize: 10, color: "#aaa", margin: "1px 0 0" }}>{inicioCiclo ? inicioCiclo.slice(5) : "—"} → {finCiclo ? finCiclo.slice(5) : "—"}</p>
                     </div>
                     <span style={{ fontSize: 11, textAlign: "right" }}>{gastoDisplay > 0 ? fmt(gastoDisplay) : "—"}</span>
                     <span style={{ fontSize: 11, textAlign: "right", color: SHEET.verdeBorde }}>{pagadoDisplay > 0 ? fmt(pagadoDisplay) : "—"}</span>
@@ -2575,7 +2575,7 @@ function EstadoMesTab({ catalog, movimientos, userEmail }) {
                     <span style={{ fontSize: 11, textAlign: "right", fontWeight: 700, color: disponible <= 0 ? SHEET.rosaBorde : SHEET.verdeBorde }}>{fmt(disponible)}</span>
                   </div>
                   <p style={{ fontSize: 9, color: "#999", margin: "0 8px 6px", fontFamily: "monospace" }}>
-                    cargosCorte:{cargosCorte} pagadoPost:{pagadoPostCorte} cargosAct:{cargosActual} cargosEnCurso:{cargosEnCurso} adelantos:{adelantosCiclo}
+                    {inicioCiclo}→{finCiclo} corte:{corteYaPaso?"sí":"no"} | cargosCorte:{cargosCorte} pagadoPost:{pagadoPostCorte} cargosAct:{cargosActual} | enCurso:{cargosEnCurso} adelantos:{adelantosCiclo}
                   </p>
                 </div>
               );
@@ -3569,9 +3569,13 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
           (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste"))
         ).reduce((s, m) => s + Number(m.cantidad), 0));
 
+        // Adelantos hechos dentro del ciclo (reducen los cargos del corte)
+        const adelantosEnCiclo = calcularAdelanto(t.nombre, inicioCiclo, finCiclo);
+        const cargosNetosCorte = r2(Math.max(0, cargosEnCiclo - adelantosEnCiclo));
+
         // Pagado después del corte (solo aplica si el corte ya pasó)
         const pagadoCorteAnt = corteYaPaso ? calcularPagado(t.nombre, finCiclo, fechaPago) : 0;
-        const pendienteCorteAnt = corteYaPaso ? r2(Math.max(0, cargosEnCiclo - pagadoCorteAnt)) : 0;
+        const pendienteCorteAnt = corteYaPaso ? r2(Math.max(0, cargosNetosCorte - pagadoCorteAnt)) : 0;
 
         // Ciclo actual = gastos después del finCiclo hasta hoy (solo si el corte ya pasó)
         const inicioCicloActual = finCiclo ? (() => {
@@ -3663,8 +3667,8 @@ function TDCTab({ catalog, setCatalog, guardarAhora, movimientos, userEmail }) {
                   {fechaPago ? <span style={{ color: SHEET.rosaBorde }}> · Pagar antes: {fmtDate(fechaPago)}</span> : " · Configura días de pago ↑"}
                 </p>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, fontSize: 11.5 }}>
-                  <div><span style={{ color: "#777", fontSize: 10 }}>Cargos del corte</span><br /><b>{fmt(cargosEnCiclo)}</b></div>
-                  <div><span style={{ color: "#777", fontSize: 10 }}>Pagado</span><br /><b style={{ color: SHEET.verdeBorde }}>{fmt(pagadoCorteAnt)}</b></div>
+                  <div><span style={{ color: "#777", fontSize: 10 }}>Cargos del corte</span><br /><b>{fmt(cargosNetosCorte)}</b></div>
+                  <div><span style={{ color: "#777", fontSize: 10 }}>Pagado</span><br /><b style={{ color: SHEET.verdeBorde }}>{fmt(r2(adelantosEnCiclo + pagadoCorteAnt))}</b></div>
                   <div><span style={{ color: "#777", fontSize: 10 }}>Pendiente</span><br />
                     <b style={{ color: pendienteCorteAnt > 0 ? SHEET.rosaBorde : SHEET.verdeBorde, fontSize: 13 }}>
                       {pendienteCorteAnt > 0 ? fmt(pendienteCorteAnt) : "✓ Al día"}
