@@ -6711,7 +6711,7 @@ export default function App() {
         await supabase.from("catalogos").insert({ user_id: userId, data: DEFAULT_CATALOG });
         setCatalog(DEFAULT_CATALOG);
       }
-      const { data: movs } = await supabase.from("movimientos").select("*").eq("user_id", userId).order("fecha", { ascending: false });
+      const { data: movs } = await supabase.from("movimientos").select("*").eq("user_id", userId).order("fecha", { ascending: false }).order("created_at", { ascending: false });
       setMovimientos((movs || []).map((m) => ({ ...m, cantidad: Number(m.cantidad) })));
       setLoaded(true);
     })();
