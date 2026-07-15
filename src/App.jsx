@@ -1240,19 +1240,65 @@ function ResumenTab({ movimientos, catalog }) {
     movimientos.filter(m => m.mov === "Ingreso" && m.metodo === "TDD").reduce((s, m) => s + Number(m.cantidad), 0) -
     movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDD" && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0)
   ) * 100) / 100;
-  // Disponible por tarjeta TDC = límite - diferidos pendientes - deuda real
-  const tarjetasTDC = (catalog.cuentas.TDC || []);
-  const dispPorTarjeta = tarjetasTDC.map(nombre => {
-    const t = (catalog.tarjetasTDC || []).find(x => x.nombre === nombre) || {};
-    const limite = t.limite || 0;
-    const difs = (catalog.diferidos || []).filter(d => d.activo && d.tarjeta === nombre).reduce((s, d) => {
+  // Disponible por tarjeta TDC — mismo cálculo que TDCTab
+  const tarjetasTDC = (catalog.tarjetasTDC || []);
+  const dispPorTarjeta = tarjetasTDC.map(t => {
+    const mesActual = todayISO().slice(0, 7);
+    const hoyStr = todayISO();
+    const { inicioCiclo, finCiclo } = calcFechasCiclo(t.diaCiclo, mesActual);
+    const corteYaPaso = !!(finCiclo && finCiclo <= hoyStr);
+    const r2 = n => Math.round(n * 100) / 100;
+
+    // Diferidos pendientes
+    const totalDifPendiente = (catalog.diferidos || []).filter(d => d.activo && d.tarjeta === t.nombre).reduce((s, d) => {
       const base = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
       return s + Math.max(0, base - (d.pagado || 0));
     }, 0);
-    const gastos = movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDC" && m.cuenta === nombre && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0);
-    const pagos = movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && (m.cuenta === nombre || m.categoria === nombre) && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0);
-    const deuda = Math.max(0, gastos - pagos);
-    return { nombre, disponible: Math.max(0, Math.round((limite - difs - deuda) * 100) / 100) };
+
+    // Cargos del ciclo anterior
+    const cargosEnCiclo = r2(movimientos.filter(m =>
+      m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
+      m.fecha >= inicioCiclo && m.fecha <= finCiclo
+    ).reduce((s, m) => s + Number(m.cantidad), 0));
+
+    // Adelantos dentro del ciclo
+    const adelantosEnCiclo = r2(movimientos.filter(m =>
+      m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+      (m.cuenta === t.nombre || m.categoria === t.nombre) &&
+      m.fecha >= inicioCiclo && m.fecha <= finCiclo &&
+      m.metodo !== "TDC"
+    ).reduce((s, m) => s + Number(m.cantidad), 0));
+    const cargosNetosCorte = r2(Math.max(0, cargosEnCiclo - adelantosEnCiclo));
+
+    // Pagado post-corte
+    const dSig = finCiclo ? (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : null;
+    const pagadoCorteAnt = (corteYaPaso && dSig) ? r2(movimientos.filter(m =>
+      m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+      (m.cuenta === t.nombre || m.categoria === t.nombre) &&
+      m.fecha >= dSig && m.metodo !== "TDC"
+    ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+    const pendienteCorteAnt = corteYaPaso ? r2(Math.max(0, cargosNetosCorte - pagadoCorteAnt)) : 0;
+
+    // Cargos ciclo actual
+    const cargosActual = (corteYaPaso && dSig) ? r2(movimientos.filter(m =>
+      m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
+      m.fecha >= dSig && m.fecha <= hoyStr
+    ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+
+    // Ciclo abierto
+    const cargosEnCurso = !corteYaPaso ? r2(movimientos.filter(m =>
+      m.mov === "Egreso" && m.cuenta === t.nombre &&
+      (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste")) &&
+      m.fecha >= inicioCiclo && m.fecha <= hoyStr
+    ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+    const adelantosCicloAbierto = !corteYaPaso ? r2(movimientos.filter(m =>
+      m.mov === "Egreso" && m.tipo === "Pago TDC" &&
+      (m.cuenta === t.nombre || m.categoria === t.nombre) &&
+      m.fecha >= inicioCiclo && m.fecha <= hoyStr && m.metodo !== "TDC"
+    ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+
+    const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - pendienteCorteAnt - cargosActual - Math.max(0, cargosEnCurso - adelantosCicloAbierto)));
+    return { nombre: t.nombre, disponible };
   });
 
   return (
