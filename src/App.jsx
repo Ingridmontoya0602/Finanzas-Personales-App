@@ -1298,7 +1298,7 @@ function ResumenTab({ movimientos, catalog }) {
     ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
 
     const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - pendienteCorteAnt - cargosActual - Math.max(0, cargosEnCurso - adelantosCicloAbierto)));
-    return { nombre: t.nombre, disponible };
+    return { nombre: t.nombre, disponible, _debug: `dia:${t.diaCiclo} fin:${finCiclo} corte:${corteYaPaso?"sí":"no"} pend:${pendienteCorteAnt}` };
   });
 
   return (
@@ -1323,6 +1323,7 @@ function ResumenTab({ movimientos, catalog }) {
             {dispPorTarjeta.map(t => (
               <div key={t.nombre} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: 8, marginBottom: 3 }}>
                 <span style={{ fontSize: 11, color: "#777" }}>{t.nombre}</span>
+                <span style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>{t._debug}</span>
                 <b style={{ fontSize: 12, color: t.disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(t.disponible)}</b>
               </div>
             ))}
