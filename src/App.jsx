@@ -7039,22 +7039,31 @@ export default function App() {
     const mesActual = todayISO().slice(0, 7);
     const hoyStr = todayISO();
     const r2 = n => Math.round(n * 100) / 100;
+    const ciclosMes = (catalog.ciclosTDC || {})[mesActual] || {};
     const tarjetas = (catalog.cuentas.TDC || []).map(nombre => {
       const d = (catalog.tarjetasTDC || []).find(t => t.nombre === nombre);
       return d && d.activa !== false ? { nombre, limite: 0, diaCiclo: 1, ...d } : null;
     }).filter(Boolean);
     return tarjetas.map(t => {
       const { inicioCiclo, finCiclo } = calcFechasCiclo(t.diaCiclo, mesActual);
+      const ciclo = ciclosMes[t.nombre] || {};
+      let fechaPago = "";
+      if (finCiclo && ciclo.diasPago > 0) {
+        const d = new Date(finCiclo); d.setDate(d.getDate() + ciclo.diasPago);
+        fechaPago = d.toISOString().slice(0, 10);
+      }
       const corteYaPaso = !!(finCiclo && finCiclo <= hoyStr);
       const difPend = r2((catalog.diferidos || []).filter(d => d.activo && d.tarjeta === t.nombre).reduce((s, d) => {
         const base = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
         return s + Math.max(0, base - (d.pagado || 0));
       }, 0));
-      const cargosEnCiclo = r2(movimientos.filter(m => m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" && m.fecha >= inicioCiclo && m.fecha <= finCiclo).reduce((s, m) => s + Number(m.cantidad), 0));
+      // Igual que TDCTab: incluye Ajustes en cargosEnCiclo
+      const cargosEnCiclo = r2(movimientos.filter(m => m.mov === "Egreso" && m.cuenta === t.nombre && m.fecha >= inicioCiclo && m.fecha <= finCiclo && (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste"))).reduce((s, m) => s + Number(m.cantidad), 0));
       const adelantosEnCiclo = r2(movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && (m.cuenta === t.nombre || m.categoria === t.nombre) && m.fecha >= inicioCiclo && m.fecha <= finCiclo && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0));
       const cargosNetos = r2(Math.max(0, cargosEnCiclo - adelantosEnCiclo));
+      const hasta = fechaPago || "9999-12-31";
       const dSig = finCiclo ? (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : null;
-      const pagadoPost = (corteYaPaso && dSig) ? r2(movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && (m.cuenta === t.nombre || m.categoria === t.nombre) && m.fecha >= dSig && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+      const pagadoPost = (corteYaPaso && dSig) ? r2(movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && (m.cuenta === t.nombre || m.categoria === t.nombre) && m.fecha >= dSig && m.fecha <= hasta && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
       const pendiente = corteYaPaso ? r2(Math.max(0, cargosNetos - pagadoPost)) : 0;
       const cargosActual = (corteYaPaso && dSig) ? r2(movimientos.filter(m => m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" && m.fecha >= dSig && m.fecha <= hoyStr).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
       const cargosEnCurso = !corteYaPaso ? r2(movimientos.filter(m => m.mov === "Egreso" && m.cuenta === t.nombre && (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste")) && m.fecha >= inicioCiclo && m.fecha <= hoyStr).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
@@ -7086,7 +7095,7 @@ export default function App() {
         <h2 style={{ margin: 0, fontWeight: 700, fontStyle: "italic", fontSize: 19 }}>
           {catalog._nombre ? `Hola, ${catalog._nombre} 👋` : "Finanzas Personales"}
         </h2>
-        <p style={{ fontSize: 12, color: "#666", margin: "2px 0 0", fontStyle: "italic" }}>{session.user.email} · {movimientos.length} movimientos</p>
+        <p style={{ fontSize: 12, color: "#666", margin: "2px 0 0", fontStyle: "italic" }}></p>
       </div>
       <TabBar tab={tab} setTab={setTab} onLogout={handleLogout} userEmail={session.user.email} />
 
