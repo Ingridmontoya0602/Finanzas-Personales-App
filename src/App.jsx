@@ -405,7 +405,7 @@ function CuentaTab({ userEmail, movimientos, onLogout, catalog, onNombreChange }
   );
 }
 
-function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
+function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos, registrarPagoDiferido }) {
   const [mov, setMov] = useState("Egreso");
   const [metodo, setMetodo] = useState("");
   const [cuenta, setCuenta] = useState("");
@@ -420,6 +420,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
   const [fecha, setFecha] = useState(todayISO());
   const [cantidad, setCantidad] = useState("");
   const [esDiferido, setEsDiferido] = useState(false);
+  const [diferidoSel, setDiferidoSel] = useState(""); // diferido existente a pagar
   const [plazoMeses, setPlazoMeses] = useState("");
   const [nombreDiferido, setNombreDiferido] = useState("");
   const [pagosPrevios, setPagosPrevios] = useState("");
@@ -467,7 +468,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
     setMetodo(""); setCuenta(""); setTipo(""); setCategoria(""); setSubcategoria("");
     setIngresoTipo(""); setIngresoSub(""); setIngresoPersonaTercero(""); setDescripcion(""); setLugar(""); setCantidad("");
     setFecha(todayISO()); setErrors({}); setEsDiferido(false); setPlazoMeses(""); setNombreDiferido("");
-    setPagosPrevios(""); setPagadoPrevio("");
+    setPagosPrevios(""); setPagadoPrevio(""); setDiferidoSel("");
   }
 
   function validate() {
@@ -518,7 +519,13 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
         subcategoria: mov === "Egreso" ? subcategoria : (ingresoPersonaTercero || ""),
         descripcion, lugar, fecha, cantidad: amt
       };
-      await addMovimiento(entry);
+      // Si se registró como pago de un diferido existente, usar la función oficial
+      // que actualiza el contador de pagos y el catálogo correctamente
+      if (diferidoSel && registrarPagoDiferido) {
+        await registrarPagoDiferido(diferidoSel, amt, fecha);
+      } else {
+        await addMovimiento(entry);
+      }
     }
     setSaved(true);
     setTimeout(() => setSaved(false), 1400);
@@ -908,6 +915,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                   const v = e.target.value;
                   setCategoria(v);
                   setErrors((p) => ({ ...p, categoria: false }));
+                  setDiferidoSel(""); // reset diferido al cambiar categoría
                   if (tipo === "Ahorro") {
                     const aho = (catalog.ahorros || []).find((a) => a.nombre === v);
                     if (aho) { setCantidad(String(aho.aportacion)); if (aho.metodo) setMetodo(aho.metodo); if (aho.cuenta) setCuenta(aho.cuenta); }
@@ -921,6 +929,41 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos }) {
                 </select>
                 {tipo === "Pago TDC" && categoria && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>El abono se registrará a {categoria}. Elige abajo de dónde salió el dinero.</p>}
               </Field>
+
+              {/* Selector de diferido existente — visible cuando hay diferidos activos TDC */}
+              {mov === "Egreso" && (() => {
+                const difsActivos = (catalog.diferidos || []).filter(d => d.activo);
+                if (difsActivos.length === 0) return null;
+                return (
+                  <Field label="Pago de diferido (opcional)">
+                    <select value={diferidoSel} onChange={(e) => {
+                      const id = e.target.value;
+                      setDiferidoSel(id);
+                      if (!id) return;
+                      const dif = difsActivos.find(d => d.id === id);
+                      if (!dif) return;
+                      // Autocompletar: tipo, categoría, metodo, cuenta, cantidad
+                      setTipo("G. Variable");
+                      setCategoria("Diferidos TDC");
+                      setMetodo("TDC");
+                      setCuenta(dif.tarjeta || "");
+                      // Mensualidad: si tiene mensualidadFija úsala, sino divide
+                      const monto = dif.mensualidadFija || (dif.costoTotal && dif.plazoMeses ? Math.round(dif.costoTotal / dif.plazoMeses * 100) / 100 : "");
+                      if (monto) setCantidad(String(monto));
+                      const etiqueta = dif.nombre || `${dif.categoria}${dif.subcategoria ? " · " + dif.subcategoria : ""}`;
+                      setDescripcion(`Diferido: ${etiqueta}`);
+                    }} style={selStyle(false)}>
+                      <option value="">Sin diferido</option>
+                      {difsActivos.map(d => {
+                        const etiqueta = d.nombre || `${d.categoria}${d.subcategoria ? " · " + d.subcategoria : ""}`;
+                        const restante = d.plazoMeses - d.pagos;
+                        return <option key={d.id} value={d.id}>{etiqueta} — {d.tarjeta} ({restante} pagos)</option>;
+                      })}
+                    </select>
+                    {diferidoSel && <p style={{ fontSize: 11, color: "#555", fontStyle: "italic", margin: "4px 0 0" }}>Datos prellenados — verifica la cantidad antes de guardar.</p>}
+                  </Field>
+                );
+              })()}
               {/* Subcategoría para G.Fijo (membresías/servicios/seguros) */}
               {tipo === "G. Fijo" && categoria && (
                 <Field label="Subcategoría" error={errors.subcategoria}>
@@ -1188,10 +1231,58 @@ function ResumenTab({ movimientos, catalog }) {
     });
   }, [meses, movimientos]);
 
+  // --- Disponible por método (historial completo) ---
+  const dispEfectivo = Math.round((
+    movimientos.filter(m => m.mov === "Ingreso" && m.metodo === "Efectivo").reduce((s, m) => s + Number(m.cantidad), 0) -
+    movimientos.filter(m => m.mov === "Egreso" && m.metodo === "Efectivo").reduce((s, m) => s + Number(m.cantidad), 0)
+  ) * 100) / 100;
+  const dispTDD = Math.round((
+    movimientos.filter(m => m.mov === "Ingreso" && m.metodo === "TDD").reduce((s, m) => s + Number(m.cantidad), 0) -
+    movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDD" && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0)
+  ) * 100) / 100;
+  // Disponible por tarjeta TDC = límite - diferidos pendientes - deuda real
+  const tarjetasTDC = (catalog.cuentas.TDC || []);
+  const dispPorTarjeta = tarjetasTDC.map(nombre => {
+    const t = (catalog.tarjetasTDC || []).find(x => x.nombre === nombre) || {};
+    const limite = t.limite || 0;
+    const difs = (catalog.diferidos || []).filter(d => d.activo && d.tarjeta === nombre).reduce((s, d) => {
+      const base = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
+      return s + Math.max(0, base - (d.pagado || 0));
+    }, 0);
+    const gastos = movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDC" && m.cuenta === nombre && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0);
+    const pagos = movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && (m.cuenta === nombre || m.categoria === nombre) && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0);
+    const deuda = Math.max(0, gastos - pagos);
+    return { nombre, disponible: Math.max(0, Math.round((limite - difs - deuda) * 100) / 100) };
+  });
+
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
 
-      {/* === FLUJO TOTAL ACUMULADO === */}
+      {/* === RESUMEN DISPONIBLE === */}
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginBottom: 14 }}>
+        <div style={{ background: SHEET.azul, borderBottom: "2px solid " + SHEET.azulBorde, padding: "7px 12px" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: SHEET.azulBorde }}>💰 Disponible ahora</span>
+        </div>
+        <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "#555" }}>Efectivo</span>
+            <b style={{ fontSize: 13, color: dispEfectivo >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(dispEfectivo)}</b>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "#555" }}>TDD</span>
+            <b style={{ fontSize: 13, color: dispTDD >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(dispTDD)}</b>
+          </div>
+          <div style={{ borderTop: "1px solid " + SHEET.grisBorde, paddingTop: 6, marginTop: 2 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4 }}>TDC</span>
+            {dispPorTarjeta.map(t => (
+              <div key={t.nombre} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: 8, marginBottom: 3 }}>
+                <span style={{ fontSize: 11, color: "#777" }}>{t.nombre}</span>
+                <b style={{ fontSize: 12, color: t.disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(t.disponible)}</b>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden", marginBottom: 18 }}>
         <HeaderBand color={SHEET.azul} borderColor={SHEET.azulBorde}>Flujo de Efectivo Total</HeaderBand>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "#fff" }}>
@@ -7006,7 +7097,7 @@ export default function App() {
           }}>Ir a Datos →</button>
         </div>
       )}
-      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} movimientos={movimientos} />}
+      {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} movimientos={movimientos} registrarPagoDiferido={registrarPagoDiferido} />}
       {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "presupuesto" && <PresupuestoTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
