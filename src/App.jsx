@@ -6856,7 +6856,7 @@ export default function App() {
     const etiqueta = dif.nombre || `${dif.categoria}${dif.subcategoria ? " · " + dif.subcategoria : ""}`;
     await addMovimiento({
       mov: "Egreso", metodo: "TDC", cuenta: dif.tarjeta,
-      tipo: "Pago TDC", categoria: "Pago TDC", subcategoria: dif.tarjeta,
+      tipo: "G. Variable", categoria: "Diferidos TDC", subcategoria: etiqueta,
       descripcion: `Diferido: ${etiqueta}${dif.descripcion ? " · " + dif.descripcion : ""}`,
       lugar: `__diferido:${diferidoId}`, fecha, cantidad: monto
     });
