@@ -1170,7 +1170,7 @@ function RegistrarTab({ catalog, addMovimiento, addDiferido, movimientos, regist
   );
 }
 
-function ResumenTab({ movimientos, catalog }) {
+function ResumenTab({ movimientos, catalog, disponiblePorTarjeta }) {
   const [mesAbierto, setMesAbierto] = useState(null);
 
   // --- Flujo total acumulado hasta hoy ---
@@ -1240,66 +1240,7 @@ function ResumenTab({ movimientos, catalog }) {
     movimientos.filter(m => m.mov === "Ingreso" && m.metodo === "TDD").reduce((s, m) => s + Number(m.cantidad), 0) -
     movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDD" && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0)
   ) * 100) / 100;
-  // Disponible por tarjeta TDC — mismo cálculo que TDCTab
-  const tarjetasTDC = (catalog.tarjetasTDC || []);
-  const dispPorTarjeta = tarjetasTDC.map(t => {
-    const mesActual = todayISO().slice(0, 7);
-    const hoyStr = todayISO();
-    const { inicioCiclo, finCiclo } = calcFechasCiclo(t.diaCiclo, mesActual);
-    const corteYaPaso = !!(finCiclo && finCiclo <= hoyStr);
-    const r2 = n => Math.round(n * 100) / 100;
-
-    // Diferidos pendientes
-    const totalDifPendiente = (catalog.diferidos || []).filter(d => d.activo && d.tarjeta === t.nombre).reduce((s, d) => {
-      const base = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
-      return s + Math.max(0, base - (d.pagado || 0));
-    }, 0);
-
-    // Cargos del ciclo anterior
-    const cargosEnCiclo = r2(movimientos.filter(m =>
-      m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
-      m.fecha >= inicioCiclo && m.fecha <= finCiclo
-    ).reduce((s, m) => s + Number(m.cantidad), 0));
-
-    // Adelantos dentro del ciclo
-    const adelantosEnCiclo = r2(movimientos.filter(m =>
-      m.mov === "Egreso" && m.tipo === "Pago TDC" &&
-      (m.cuenta === t.nombre || m.categoria === t.nombre) &&
-      m.fecha >= inicioCiclo && m.fecha <= finCiclo &&
-      m.metodo !== "TDC"
-    ).reduce((s, m) => s + Number(m.cantidad), 0));
-    const cargosNetosCorte = r2(Math.max(0, cargosEnCiclo - adelantosEnCiclo));
-
-    // Pagado post-corte
-    const dSig = finCiclo ? (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : null;
-    const pagadoCorteAnt = (corteYaPaso && dSig) ? r2(movimientos.filter(m =>
-      m.mov === "Egreso" && m.tipo === "Pago TDC" &&
-      (m.cuenta === t.nombre || m.categoria === t.nombre) &&
-      m.fecha >= dSig && m.metodo !== "TDC"
-    ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
-    const pendienteCorteAnt = corteYaPaso ? r2(Math.max(0, cargosNetosCorte - pagadoCorteAnt)) : 0;
-
-    // Cargos ciclo actual
-    const cargosActual = (corteYaPaso && dSig) ? r2(movimientos.filter(m =>
-      m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" &&
-      m.fecha >= dSig && m.fecha <= hoyStr
-    ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
-
-    // Ciclo abierto
-    const cargosEnCurso = !corteYaPaso ? r2(movimientos.filter(m =>
-      m.mov === "Egreso" && m.cuenta === t.nombre &&
-      (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste")) &&
-      m.fecha >= inicioCiclo && m.fecha <= hoyStr
-    ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
-    const adelantosCicloAbierto = !corteYaPaso ? r2(movimientos.filter(m =>
-      m.mov === "Egreso" && m.tipo === "Pago TDC" &&
-      (m.cuenta === t.nombre || m.categoria === t.nombre) &&
-      m.fecha >= inicioCiclo && m.fecha <= hoyStr && m.metodo !== "TDC"
-    ).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
-
-    const disponible = r2(Math.max(0, (t.limite || 0) - totalDifPendiente - pendienteCorteAnt - cargosActual - Math.max(0, cargosEnCurso - adelantosCicloAbierto)));
-    return { nombre: t.nombre, disponible, _debug: `dia:${t.diaCiclo} fin:${finCiclo} corte:${corteYaPaso?"sí":"no"} pend:${pendienteCorteAnt}` };
-  });
+  const dispPorTarjeta = disponiblePorTarjeta || [];
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
@@ -1323,7 +1264,6 @@ function ResumenTab({ movimientos, catalog }) {
             {dispPorTarjeta.map(t => (
               <div key={t.nombre} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: 8, marginBottom: 3 }}>
                 <span style={{ fontSize: 11, color: "#777" }}>{t.nombre}</span>
-                <span style={{ fontSize: 10, color: "#aaa", fontFamily: "monospace" }}>{t._debug}</span>
                 <b style={{ fontSize: 12, color: t.disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(t.disponible)}</b>
               </div>
             ))}
@@ -7094,6 +7034,36 @@ export default function App() {
     await supabase.auth.signOut();
   }
 
+  // Disponible por tarjeta — mismo cálculo que TDCTab
+  const disponiblePorTarjeta = useMemo(() => {
+    const mesActual = todayISO().slice(0, 7);
+    const hoyStr = todayISO();
+    const r2 = n => Math.round(n * 100) / 100;
+    const tarjetas = (catalog.cuentas.TDC || []).map(nombre => {
+      const d = (catalog.tarjetasTDC || []).find(t => t.nombre === nombre);
+      return d && d.activa !== false ? { nombre, limite: 0, diaCiclo: 1, ...d } : null;
+    }).filter(Boolean);
+    return tarjetas.map(t => {
+      const { inicioCiclo, finCiclo } = calcFechasCiclo(t.diaCiclo, mesActual);
+      const corteYaPaso = !!(finCiclo && finCiclo <= hoyStr);
+      const difPend = r2((catalog.diferidos || []).filter(d => d.activo && d.tarjeta === t.nombre).reduce((s, d) => {
+        const base = d.conIntereses && d.capitalOriginal ? d.capitalOriginal : d.costoTotal;
+        return s + Math.max(0, base - (d.pagado || 0));
+      }, 0));
+      const cargosEnCiclo = r2(movimientos.filter(m => m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" && m.fecha >= inicioCiclo && m.fecha <= finCiclo).reduce((s, m) => s + Number(m.cantidad), 0));
+      const adelantosEnCiclo = r2(movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && (m.cuenta === t.nombre || m.categoria === t.nombre) && m.fecha >= inicioCiclo && m.fecha <= finCiclo && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0));
+      const cargosNetos = r2(Math.max(0, cargosEnCiclo - adelantosEnCiclo));
+      const dSig = finCiclo ? (() => { const d = new Date(finCiclo); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); })() : null;
+      const pagadoPost = (corteYaPaso && dSig) ? r2(movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && (m.cuenta === t.nombre || m.categoria === t.nombre) && m.fecha >= dSig && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+      const pendiente = corteYaPaso ? r2(Math.max(0, cargosNetos - pagadoPost)) : 0;
+      const cargosActual = (corteYaPaso && dSig) ? r2(movimientos.filter(m => m.mov === "Egreso" && m.cuenta === t.nombre && m.tipo !== "Pago TDC" && m.fecha >= dSig && m.fecha <= hoyStr).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+      const cargosEnCurso = !corteYaPaso ? r2(movimientos.filter(m => m.mov === "Egreso" && m.cuenta === t.nombre && (m.tipo !== "Pago TDC" || (m.descripcion || "").includes("Ajuste")) && m.fecha >= inicioCiclo && m.fecha <= hoyStr).reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+      const adelantosCurso = !corteYaPaso ? r2(movimientos.filter(m => m.mov === "Egreso" && m.tipo === "Pago TDC" && (m.cuenta === t.nombre || m.categoria === t.nombre) && m.fecha >= inicioCiclo && m.fecha <= hoyStr && m.metodo !== "TDC").reduce((s, m) => s + Number(m.cantidad), 0)) : 0;
+      const disponible = r2(Math.max(0, (t.limite || 0) - difPend - pendiente - cargosActual - Math.max(0, cargosEnCurso - adelantosCurso)));
+      return { nombre: t.nombre, disponible };
+    });
+  }, [catalog, movimientos]);
+
   if (!session) return <LoginScreen />;
 
   if (!loaded) {
@@ -7145,7 +7115,7 @@ export default function App() {
         </div>
       )}
       {tab === "registrar" && <RegistrarTab catalog={catalog} addMovimiento={addMovimiento} addDiferido={addDiferido} movimientos={movimientos} registrarPagoDiferido={registrarPagoDiferido} />}
-      {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} />}
+      {tab === "resumen" && <ResumenTab movimientos={movimientos} catalog={catalog} disponiblePorTarjeta={disponiblePorTarjeta} />}
       {tab === "historial" && <HistorialTab movimientos={movimientos} deleteMovimiento={deleteMovimiento} />}
       {tab === "presupuesto" && <PresupuestoTab catalog={catalog} movimientos={movimientos} userEmail={session.user.email} />}
       {tab === "cuenta" && <CuentaTab userEmail={session.user.email} movimientos={movimientos} onLogout={handleLogout} catalog={catalog} onNombreChange={(nombre) => { const actualizado = { ...catalogRef.current, _nombre: nombre }; setCatalog(actualizado); guardarCatalogoAhora(actualizado); }} />}
