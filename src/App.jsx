@@ -1241,6 +1241,42 @@ function ResumenTab({ movimientos, catalog, disponiblePorTarjeta }) {
     movimientos.filter(m => m.mov === "Egreso" && m.metodo === "TDD" && m.tipo !== "Pago TDC").reduce((s, m) => s + Number(m.cantidad), 0)
   ) * 100) / 100;
   const dispPorTarjeta = disponiblePorTarjeta || [];
+  const totalEfectivoTDD = Math.round((dispEfectivo + dispTDD) * 100) / 100;
+  const totalTDC = Math.round(dispPorTarjeta.reduce((s, t) => s + t.disponible, 0) * 100) / 100;
+
+  function exportarPDFReporte() {
+    const ingresos = movimientos.filter(m => m.mov === "Ingreso").sort((a, b) => a.fecha < b.fecha ? 1 : -1);
+    const egresos = movimientos.filter(m => m.mov === "Egreso").sort((a, b) => a.fecha < b.fecha ? 1 : -1);
+    const fila = (m) => `<tr><td>${m.fecha}</td><td>${m.tipo || m.ingresoTipo || "—"}</td><td>${m.categoria || "—"}</td><td>${m.subcategoria || "—"}</td><td>${m.descripcion || "—"}</td><td>${m.metodo || "—"}</td><td>${m.cuenta || "—"}</td><td style="text-align:right"><b>$${Number(m.cantidad).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</b></td></tr>`;
+    const th = `<tr style="background:#eee"><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Subcategoría</th><th>Descripción</th><th>Método</th><th>Cuenta</th><th>Monto</th></tr>`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte Finanzas</title>
+    <style>body{font-family:Arial,sans-serif;font-size:11px;padding:20px}h1{font-size:16px}h2{font-size:13px;margin-top:24px;color:#333}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:4px 6px;text-align:left}tr:nth-child(even){background:#f9f9f9}.total{font-weight:700;background:#f0f0f0}</style>
+    </head><body>
+    <h1>Reporte de Finanzas Personales</h1>
+    <p>Generado el ${new Date().toLocaleDateString("es-MX")} · ${movimientos.length} movimientos</p>
+    <h2>💚 Ingresos (${ingresos.length})</h2>
+    <table>${th}${ingresos.map(fila).join("")}
+    <tr class="total"><td colspan="7">Total Ingresos</td><td style="text-align:right">$${totalIngresosHist.toLocaleString("es-MX",{minimumFractionDigits:2})}</td></tr></table>
+    <h2>🔴 Egresos (${egresos.length})</h2>
+    <table>${th}${egresos.map(fila).join("")}
+    <tr class="total"><td colspan="7">Total Egresos</td><td style="text-align:right">$${totalEgresosHist.toLocaleString("es-MX",{minimumFractionDigits:2})}</td></tr></table>
+    </body></html>`;
+    const w = window.open("", "_blank");
+    w.document.write(html);
+    w.document.close();
+    w.print();
+  }
+
+  function exportarExcelReporte() {
+    const cols = ["Fecha", "Movimiento", "Tipo", "Categoría", "Subcategoría", "Descripción", "Lugar", "Método", "Cuenta", "Monto"];
+    const filas = movimientos.sort((a, b) => a.fecha < b.fecha ? 1 : -1).map(m =>
+      [m.fecha, m.mov, m.tipo || m.ingresoTipo || "", m.categoria || "", m.subcategoria || "", m.descripcion || "", m.lugar || "", m.metodo || "", m.cuenta || "", Number(m.cantidad)]
+    );
+    const csv = [cols, ...filas].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `finanzas_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+  }
 
   return (
     <div style={{ fontFamily: SHEET.fuente }}>
@@ -1259,14 +1295,22 @@ function ResumenTab({ movimientos, catalog, disponiblePorTarjeta }) {
             <span style={{ fontSize: 12, color: "#555" }}>TDD</span>
             <b style={{ fontSize: 13, color: dispTDD >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(dispTDD)}</b>
           </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid " + SHEET.grisBorde, paddingTop: 5, marginTop: 2 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#333" }}>Subtotal Efectivo + TDD</span>
+            <b style={{ fontSize: 13, color: totalEfectivoTDD >= 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(totalEfectivoTDD)}</b>
+          </div>
           <div style={{ borderTop: "1px solid " + SHEET.grisBorde, paddingTop: 6, marginTop: 2 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4 }}>TDC</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#555", display: "block", marginBottom: 4 }}>TDC — Disponible por tarjeta</span>
             {dispPorTarjeta.map(t => (
               <div key={t.nombre} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingLeft: 8, marginBottom: 3 }}>
                 <span style={{ fontSize: 11, color: "#777" }}>{t.nombre}</span>
                 <b style={{ fontSize: 12, color: t.disponible > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(t.disponible)}</b>
               </div>
             ))}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid " + SHEET.grisBorde, paddingTop: 5, marginTop: 4, paddingLeft: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#333" }}>Subtotal TDC</span>
+              <b style={{ fontSize: 13, color: totalTDC > 0 ? SHEET.verdeBorde : SHEET.rosaBorde }}>{fmt(totalTDC)}</b>
+            </div>
           </div>
         </div>
       </div>
@@ -1292,6 +1336,10 @@ function ResumenTab({ movimientos, catalog, disponiblePorTarjeta }) {
             <b style={{ fontSize: 12, color: SHEET.rosaBorde }}>{fmt(deudaTDCHist)}</b>
           </div>
         )}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: "10px 12px", borderTop: "1px solid " + SHEET.grisBorde }}>
+          <button onClick={exportarPDFReporte} style={{ padding: "8px", fontSize: 12, fontWeight: 700, border: "1px solid " + SHEET.grisBorde, borderRadius: 4, background: SHEET.gris, cursor: "pointer", fontFamily: SHEET.fuente }}>📄 PDF</button>
+          <button onClick={exportarExcelReporte} style={{ padding: "8px", fontSize: 12, fontWeight: 700, border: "1px solid " + SHEET.grisBorde, borderRadius: 4, background: SHEET.gris, cursor: "pointer", fontFamily: SHEET.fuente }}>📊 Excel</button>
+        </div>
       </div>
 
       {/* Desglose ingresos histórico */}
