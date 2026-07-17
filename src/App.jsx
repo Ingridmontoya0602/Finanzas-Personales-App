@@ -1245,35 +1245,63 @@ function ResumenTab({ movimientos, catalog, disponiblePorTarjeta }) {
   const totalTDC = Math.round(dispPorTarjeta.reduce((s, t) => s + t.disponible, 0) * 100) / 100;
 
   function exportarPDFReporte() {
-    const ingresos = movimientos.filter(m => m.mov === "Ingreso").sort((a, b) => a.fecha < b.fecha ? 1 : -1);
-    const egresos = movimientos.filter(m => m.mov === "Egreso").sort((a, b) => a.fecha < b.fecha ? 1 : -1);
-    const fila = (m) => `<tr><td>${m.fecha}</td><td>${m.tipo || m.ingresoTipo || "—"}</td><td>${m.categoria || "—"}</td><td>${m.subcategoria || "—"}</td><td>${m.descripcion || "—"}</td><td>${m.metodo || "—"}</td><td>${m.cuenta || "—"}</td><td style="text-align:right"><b>$${Number(m.cantidad).toLocaleString("es-MX", { minimumFractionDigits: 2 })}</b></td></tr>`;
-    const th = `<tr style="background:#eee"><th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Subcategoría</th><th>Descripción</th><th>Método</th><th>Cuenta</th><th>Monto</th></tr>`;
+    const th = `<tr style="background:#ddd"><th>Fecha</th><th>Categoría</th><th>Subcategoría</th><th>Descripción</th><th>Método</th><th>Cuenta</th><th style="text-align:right">Monto</th></tr>`;
+    const fila = m => `<tr><td>${m.fecha}</td><td>${m.categoria||"—"}</td><td>${m.subcategoria||"—"}</td><td>${m.descripcion||"—"}</td><td>${m.metodo||"—"}</td><td>${m.cuenta||"—"}</td><td style="text-align:right">$${Number(m.cantidad).toLocaleString("es-MX",{minimumFractionDigits:2})}</td></tr>`;
+
+    // Agrupa por tipo, subtotal por tipo
+    function seccionPorTipo(movs, titulo, colorHeader) {
+      const tipos = {};
+      movs.forEach(m => {
+        const t = m.tipo || m.ingresoTipo || "Otro(a)";
+        if (!tipos[t]) tipos[t] = [];
+        tipos[t].push(m);
+      });
+      let html = `<h2 style="color:${colorHeader};margin-top:20px">${titulo}</h2>`;
+      let totalGeneral = 0;
+      Object.entries(tipos).sort((a,b) => b[1].reduce((s,m)=>s+Number(m.cantidad),0) - a[1].reduce((s,m)=>s+Number(m.cantidad),0)).forEach(([tipo, items]) => {
+        const subtotal = items.reduce((s,m) => s+Number(m.cantidad), 0);
+        totalGeneral += subtotal;
+        html += `<h3 style="margin:12px 0 4px;font-size:12px;color:#333">${tipo} <span style="font-weight:normal;color:#666">(${items.length} mov)</span></h3>`;
+        html += `<table>${th}${items.sort((a,b)=>a.fecha<b.fecha?1:-1).map(fila).join("")}`;
+        html += `<tr style="background:#f5f5f5;font-weight:700"><td colspan="6">Subtotal ${tipo}</td><td style="text-align:right">$${subtotal.toLocaleString("es-MX",{minimumFractionDigits:2})}</td></tr></table>`;
+      });
+      html += `<p style="text-align:right;font-weight:700;font-size:13px;margin-top:6px">Total ${titulo}: $${totalGeneral.toLocaleString("es-MX",{minimumFractionDigits:2})}</p>`;
+      return html;
+    }
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Reporte Finanzas</title>
-    <style>body{font-family:Arial,sans-serif;font-size:11px;padding:20px}h1{font-size:16px}h2{font-size:13px;margin-top:24px;color:#333}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{border:1px solid #ddd;padding:4px 6px;text-align:left}tr:nth-child(even){background:#f9f9f9}.total{font-weight:700;background:#f0f0f0}</style>
+    <style>body{font-family:Arial,sans-serif;font-size:11px;padding:20px}h1{font-size:16px}h2{font-size:14px}h3{font-size:12px}table{width:100%;border-collapse:collapse;margin-top:4px}th,td{border:1px solid #ddd;padding:3px 6px;text-align:left}tr:nth-child(even){background:#fafafa}@media print{h3{page-break-before:auto}}</style>
     </head><body>
     <h1>Reporte de Finanzas Personales</h1>
-    <p>Generado el ${new Date().toLocaleDateString("es-MX")} · ${movimientos.length} movimientos</p>
-    <h2>💚 Ingresos (${ingresos.length})</h2>
-    <table>${th}${ingresos.map(fila).join("")}
-    <tr class="total"><td colspan="7">Total Ingresos</td><td style="text-align:right">$${totalIngresosHist.toLocaleString("es-MX",{minimumFractionDigits:2})}</td></tr></table>
-    <h2>🔴 Egresos (${egresos.length})</h2>
-    <table>${th}${egresos.map(fila).join("")}
-    <tr class="total"><td colspan="7">Total Egresos</td><td style="text-align:right">$${totalEgresosHist.toLocaleString("es-MX",{minimumFractionDigits:2})}</td></tr></table>
+    <p style="color:#666">Generado el ${new Date().toLocaleDateString("es-MX")} · ${movimientos.length} movimientos</p>
+    ${seccionPorTipo(movimientos.filter(m=>m.mov==="Ingreso"), "💚 Ingresos", "#2a7a2a")}
+    ${seccionPorTipo(movimientos.filter(m=>m.mov==="Egreso"), "🔴 Egresos", "#b00")}
     </body></html>`;
     const w = window.open("", "_blank");
-    w.document.write(html);
-    w.document.close();
-    w.print();
+    w.document.write(html); w.document.close(); setTimeout(() => w.print(), 500);
   }
 
   function exportarExcelReporte() {
-    const cols = ["Fecha", "Movimiento", "Tipo", "Categoría", "Subcategoría", "Descripción", "Lugar", "Método", "Cuenta", "Monto"];
-    const filas = movimientos.sort((a, b) => a.fecha < b.fecha ? 1 : -1).map(m =>
-      [m.fecha, m.mov, m.tipo || m.ingresoTipo || "", m.categoria || "", m.subcategoria || "", m.descripcion || "", m.lugar || "", m.metodo || "", m.cuenta || "", Number(m.cantidad)]
-    );
-    const csv = [cols, ...filas].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    // Agrupa por mov → tipo, con separadores visuales en CSV
+    const rows = [["Movimiento","Tipo","Categoría","Subcategoría","Descripción","Fecha","Método","Cuenta","Monto"]];
+    ["Ingreso","Egreso"].forEach(mov => {
+      const tipos = {};
+      movimientos.filter(m=>m.mov===mov).forEach(m => {
+        const t = m.tipo || m.ingresoTipo || "Otro(a)";
+        if (!tipos[t]) tipos[t] = [];
+        tipos[t].push(m);
+      });
+      Object.entries(tipos).forEach(([tipo, items]) => {
+        rows.push([`--- ${mov}: ${tipo} ---`,"","","","","","","",""]);
+        items.sort((a,b)=>a.fecha<b.fecha?1:-1).forEach(m =>
+          rows.push([mov, tipo, m.categoria||"", m.subcategoria||"", m.descripcion||"", m.fecha, m.metodo||"", m.cuenta||"", Number(m.cantidad)])
+        );
+        const sub = items.reduce((s,m)=>s+Number(m.cantidad),0);
+        rows.push(["","","","","","","",`Subtotal ${tipo}`,sub]);
+      });
+    });
+    const csv = rows.map(r => r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8;"});
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = `finanzas_${new Date().toISOString().slice(0,10)}.csv`; a.click();
   }
