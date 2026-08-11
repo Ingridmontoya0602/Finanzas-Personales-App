@@ -187,50 +187,110 @@ function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState("");
+  const [msgOk, setMsgOk] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setMsg("");
+    setMsgOk(false);
     setLoading(true);
     if (mode === "signin") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setMsg(error.message);
-    } else {
+    } else if (mode === "signup") {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) setMsg(error.message);
-      else setMsg("Cuenta creada. Revisa tu correo para confirmar antes de entrar.");
+      else { setMsg("Cuenta creada. Revisa tu correo para confirmar antes de entrar."); setMsgOk(true); }
+    } else if (mode === "forgot") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+      if (error) setMsg(error.message);
+      else { setMsg("Listo. Revisa tu correo y sigue el enlace para crear una nueva contraseña."); setMsgOk(true); }
     }
     setLoading(false);
+  }
+
+  const titulo = mode === "signin" ? "Iniciar sesión" : mode === "signup" ? "Crear cuenta" : "Recuperar contraseña";
+  const colorBand = mode === "signup" ? SHEET.verde : mode === "forgot" ? SHEET.amarillo : SHEET.azul;
+  const colorBorde = mode === "signup" ? SHEET.verdeBorde : mode === "forgot" ? SHEET.amarilloBorde : SHEET.azulBorde;
+
+  return (
+    <div style={{ maxWidth: 380, margin: "60px auto", fontFamily: SHEET.fuente, padding: "0 16px" }}>
+      <h2 style={{ textAlign: "center", fontStyle: "italic", fontWeight: 700 }}>Finanzas Personales</h2>
+      <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
+        <HeaderBand color={colorBand} borderColor={colorBorde}>
+          {titulo}
+        </HeaderBand>
+        <form onSubmit={handleSubmit} style={{ background: "#fff", padding: "14px" }}>
+          <Field label="Correo">
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} style={inputBase} />
+          </Field>
+          {mode !== "forgot" && (
+            <Field label="Contraseña">
+              <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} style={inputBase} />
+            </Field>
+          )}
+          {mode === "signin" && (
+            <p style={{ textAlign: "right", fontSize: 12, margin: "-4px 0 6px" }}>
+              <a href="#" onClick={(e) => { e.preventDefault(); setMode("forgot"); setMsg(""); setMsgOk(false); }}>¿Olvidaste tu contraseña?</a>
+            </p>
+          )}
+          {msg && <p style={{ fontSize: 12, color: msgOk ? SHEET.verdeBorde : SHEET.rosaBorde, fontStyle: "italic" }}>{msg}</p>}
+          <Btn type="submit" primary full style={{ marginTop: 6 }}>
+            {loading ? "Cargando..." : mode === "signin" ? "Entrar" : mode === "signup" ? "Crear cuenta" : "Enviar enlace"}
+          </Btn>
+        </form>
+      </div>
+      <p style={{ textAlign: "center", fontSize: 13, marginTop: 14 }}>
+        {mode === "signin" && (
+          <>¿No tienes cuenta? <a href="#" onClick={(e) => { e.preventDefault(); setMode("signup"); setMsg(""); setMsgOk(false); }}>Crear una</a></>
+        )}
+        {mode === "signup" && (
+          <>¿Ya tienes cuenta? <a href="#" onClick={(e) => { e.preventDefault(); setMode("signin"); setMsg(""); setMsgOk(false); }}>Iniciar sesión</a></>
+        )}
+        {mode === "forgot" && (
+          <>¿Ya la recordaste? <a href="#" onClick={(e) => { e.preventDefault(); setMode("signin"); setMsg(""); setMsgOk(false); }}>Iniciar sesión</a></>
+        )}
+      </p>
+    </div>
+  );
+}
+
+function ResetPasswordScreen({ onDone }) {
+  const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
+  const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setMsg("");
+    if (password !== password2) { setMsg("Las contraseñas no coinciden."); return; }
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setLoading(false);
+    if (error) setMsg(error.message);
+    else onDone();
   }
 
   return (
     <div style={{ maxWidth: 380, margin: "60px auto", fontFamily: SHEET.fuente, padding: "0 16px" }}>
       <h2 style={{ textAlign: "center", fontStyle: "italic", fontWeight: 700 }}>Finanzas Personales</h2>
       <div style={{ border: "1px solid " + SHEET.grisBorde, borderRadius: 4, overflow: "hidden" }}>
-        <HeaderBand color={mode === "signin" ? SHEET.azul : SHEET.verde} borderColor={mode === "signin" ? SHEET.azulBorde : SHEET.verdeBorde}>
-          {mode === "signin" ? "Iniciar sesión" : "Crear cuenta"}
-        </HeaderBand>
+        <HeaderBand color={SHEET.amarillo} borderColor={SHEET.amarilloBorde}>Crear nueva contraseña</HeaderBand>
         <form onSubmit={handleSubmit} style={{ background: "#fff", padding: "14px" }}>
-          <Field label="Correo">
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} style={inputBase} />
-          </Field>
-          <Field label="Contraseña">
+          <Field label="Nueva contraseña">
             <input type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} style={inputBase} />
+          </Field>
+          <Field label="Confirmar contraseña">
+            <input type="password" required minLength={6} value={password2} onChange={(e) => setPassword2(e.target.value)} style={inputBase} />
           </Field>
           {msg && <p style={{ fontSize: 12, color: SHEET.rosaBorde, fontStyle: "italic" }}>{msg}</p>}
           <Btn type="submit" primary full style={{ marginTop: 6 }}>
-            {loading ? "Cargando..." : mode === "signin" ? "Entrar" : "Crear cuenta"}
+            {loading ? "Guardando..." : "Guardar contraseña"}
           </Btn>
         </form>
       </div>
-      <p style={{ textAlign: "center", fontSize: 13, marginTop: 14 }}>
-        {mode === "signin" ? (
-          <>¿No tienes cuenta? <a href="#" onClick={(e) => { e.preventDefault(); setMode("signup"); setMsg(""); }}>Crear una</a></>
-        ) : (
-          <>¿Ya tienes cuenta? <a href="#" onClick={(e) => { e.preventDefault(); setMode("signin"); setMsg(""); }}>Iniciar sesión</a></>
-        )}
-      </p>
     </div>
   );
 }
@@ -6815,12 +6875,16 @@ export default function App() {
   const [tab, setTab] = useState("registrar");
   const [catalog, setCatalog] = useState(DEFAULT_CATALOG);
   const [movimientos, setMovimientos] = useState([]);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const catalogRef = useRef(catalog);
   useEffect(() => { catalogRef.current = catalog; }, [catalog]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setSession(session));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
+      setSession(session);
+    });
     return () => listener.subscription.unsubscribe();
   }, []);
 
@@ -7148,6 +7212,8 @@ export default function App() {
       return { nombre: t.nombre, disponible };
     });
   }, [catalog, movimientos]);
+
+  if (recoveryMode) return <ResetPasswordScreen onDone={() => setRecoveryMode(false)} />;
 
   if (!session) return <LoginScreen />;
 
